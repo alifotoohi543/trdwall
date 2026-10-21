@@ -437,11 +437,36 @@ class Engine:
                 self.log_rule_decision(sym, "SELL", "فروش باقی‌مانده دارایی در نقد کردن پایان چالش.", bid, qty, o["client_id"])
 
     # ================================================================= loop
-    def tick(self) -> None:
+    def heartbeat(self) -> None:
+        """Connectivity check every minute: Wallex reachable? Logs LOST / RESTORED transitions
+        with outage duration and one compact heartbeat line per minute."""
+        t0 = time.monotonic()
+        ok, err = True, ""
         try:
             self.usdt_mid.append((utcnow(), self.broker.book("USDTTMN")["mid"]))
-        except (WallexError, TypeError):
-            pass
+        except Exception as e:  # any failure counts as an outage
+            ok, err = False, str(e)[:120]
+        ms = int((time.monotonic() - t0) * 1000)
+        state = self.db.get("conn", {"ok": True, "since": now_iso(), "outages": 0})
+        if ok != state["ok"]:
+            if not ok:
+                state.update(ok=False, since=now_iso(), outages=state.get("outages", 0) + 1)
+                log.warning("CONNECTION LOST to Wallex: %s", err)
+                self.db.event("CONN", f"lost: {err}")
+            else:
+                down = (utcnow() - datetime.fromisoformat(state["since"].replace("Z", "+00:00"))).total_seconds()
+                state.update(ok=True, since=now_iso(), last_outage_s=int(down))
+                log.warning("CONNECTION RESTORED to Wallex after %ds", down)
+                self.db.event("CONN", f"restored after {int(down)}s")
+        state.update(last_check=now_iso(), latency_ms=ms if ok else None)
+        self.db.put("conn", state)
+        pos = self.db.positions()
+        log.info("HEARTBEAT wallex=%s %s | positions=%s | outages_total=%d",
+                 "OK" if ok else "DOWN", f"{ms}ms" if ok else err[:60],
+                 ",".join(pos) or "none", state.get("outages", 0))
+
+    def tick(self) -> None:
+        self.heartbeat()
         u = self.usdt_1h_pct()
         shock = u is not None and abs(u) > self.p.shock_pct
         self.manage_orders()
@@ -479,16 +504,42 @@ class Engine:
             time.sleep(max(1.0, settings.loop_interval_s - (time.monotonic() - t0)))
 
 
+def disable_console_quickedit() -> None:
+    """A click inside a Windows console enters QuickEdit selection mode, which FREEZES any process
+    writing to it (this stalled the live engine once). Turn it off for this console only."""
+    if os.name != "nt":
+        return
+    try:
+        import ctypes
+        k32 = ctypes.windll.kernel32
+        h = k32.GetStdHandle(-10)                       # STD_INPUT_HANDLE
+        mode = ctypes.c_uint32()
+        if k32.GetConsoleMode(h, ctypes.byref(mode)):
+            k32.SetConsoleMode(h, (mode.value & ~0x0040) | 0x0080)   # clear QUICK_EDIT, set EXTENDED_FLAGS
+    except Exception:
+        pass
+
+
 def setup_logging() -> None:
+    """File log is written directly; console output goes through a queue + background thread,
+    so a frozen/blocked console can never stall trading."""
+    import logging.handlers
+    import queue
+
+    disable_console_quickedit()
     fmt = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
     root = logging.getLogger()
     root.setLevel(logging.INFO)
     fh = logging.FileHandler(LOG_DIR / "engine.log", encoding="utf-8")
     fh.setFormatter(fmt)
+    root.addHandler(fh)
     sh = logging.StreamHandler(open(sys.stdout.fileno(), "w", encoding="utf-8", closefd=False))
     sh.setFormatter(fmt)
-    root.addHandler(fh)
-    root.addHandler(sh)
+    q: queue.Queue = queue.Queue(maxsize=10_000)
+    qh = logging.handlers.QueueHandler(q)
+    root.addHandler(qh)
+    listener = logging.handlers.QueueListener(q, sh, respect_handler_level=False)
+    listener.start()
     for noisy in ("httpx", "httpx2", "openai", "httpcore", "mcp"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
