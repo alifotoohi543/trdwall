@@ -42,6 +42,10 @@ class DB:
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.executescript(SCHEMA)
+        cols = {r[1] for r in self.conn.execute("PRAGMA table_info(positions)")}
+        for col, typ in (("hold_h", "REAL"), ("trail_act", "REAL"), ("trail_mult", "REAL")):
+            if col not in cols:   # migrate DBs created before per-position exit profiles
+                self.conn.execute(f"ALTER TABLE positions ADD COLUMN {col} {typ}")
 
     def x(self, sql: str, args: tuple | dict = ()) -> sqlite3.Cursor:
         with self._lock:

@@ -167,20 +167,23 @@ with tab_live:
             else:
                 st.info("داده سرمایه هنوز کافی نیست (هر ۵ دقیقه ثبت می‌شود).")
         with b:
-            st.markdown("#### اسکن آخر بازار (RSI روی قیمت دلاری)")
+            st.markdown("#### اسکن آخر بازار (ترکیب ۳ الگوریتم روی قیمت دلاری)")
             scan = kv("last_scan") or {}
             rows = pd.DataFrame(scan.get("rows", []))
             if len(rows):
-                status_fa = {"no_setup": "بدون سیگنال", "ok": "✅ سیگنال", "probe": "🧪 ورود آزمایشی",
-                             "usdt_shock": "⚠️ شوک تتر", "edge_too_small": "سود کمتر از هزینه"}
-                rows["وضعیت"] = rows.status.map(status_fa).fillna(rows.status)
-                rows["فاصله تا ماشه"] = (rows.rsi_usd - P.capit_rsi).round(1)
-                st.dataframe(rows.rename(columns={"symbol": "نماد", "price": "قیمت (تومان)", "rsi_usd": "RSI دلاری",
-                                                  "ret_24h_usd": "تغییر ۲۴س دلاری٪"})
-                             [["نماد", "قیمت (تومان)", "RSI دلاری", "فاصله تا ماشه", "تغییر ۲۴س دلاری٪", "وضعیت"]],
-                             hide_index=True, width="stretch",
+                status_fa = {"no_setup": "بدون سیگنال", "xs_reversal": "✅ بازگشت مقطعی", "zscore_1h": "✅ Z-Score",
+                             "oversold_rsi20": "✅ اشباع فروش", "probe": "🧪 ورود آزمایشی"}
+                rows["وضعیت"] = rows.status.map(lambda x: status_fa.get(x, "⚠️ " + str(x)))
+                for c in ("z_1h", "r4h_usd"):
+                    if c not in rows:
+                        rows[c] = None
+                st.dataframe(rows.rename(columns={"symbol": "نماد", "price": "قیمت (تومان)", "rsi_usd": "RSI ۱۵د",
+                                                  "z_1h": "Z ۱س", "r4h_usd": "بازده ۴س٪"})
+                             [["نماد", "قیمت (تومان)", "RSI ۱۵د", "Z ۱س", "بازده ۴س٪", "وضعیت"]],
+                             hide_index=True, width="stretch", height=300,
                              column_config={"قیمت (تومان)": st.column_config.NumberColumn(format="localized")})
-                st.caption(f"ماشه ورود: RSI دلاری < {P.capit_rsi:.0f} · ایجنت‌ها فقط در صورت سیگنال بیدار می‌شوند")
+                st.caption("ماشه‌ها: Z ۱ساعته < ‎−۳ · بدترین بازده ۴ساعته بین ۱۴ ارز و < ‎−۵٪ · RSI ۱۵دقیقه < ۲۰ — "
+                           "ایجنت‌ها فقط روی سیگنال بیدار می‌شوند")
             st.markdown("#### پوزیشن‌های باز")
             pos = q("SELECT symbol, qty, entry, stop, target, opened, kind, trailing FROM positions")
             if len(pos):
@@ -209,9 +212,9 @@ with tab_live:
         st.plotly_chart(base_layout(fig, 340, "TMN"), width="stretch")
         fig = go.Figure(go.Scatter(x=sig.index, y=sig.rsi, mode="lines", line=dict(color=BLUE, width=2),
                                    hovertemplate="RSI %{y:.1f}<extra></extra>"))
-        fig.add_hrect(y0=0, y1=P.capit_rsi, fillcolor="rgba(12,163,12,0.08)", line_width=0)
-        fig.add_hline(y=P.capit_rsi, line=dict(color=GOOD, width=1, dash="dot"),
-                      annotation_text=f"ماشه خرید RSI<{P.capit_rsi:.0f}", annotation_position="bottom left")
+        fig.add_hrect(y0=0, y1=20, fillcolor="rgba(12,163,12,0.08)", line_width=0)
+        fig.add_hline(y=20, line=dict(color=GOOD, width=1, dash="dot"),
+                      annotation_text="ماشه اشباع فروش RSI<20", annotation_position="bottom left")
         fig.update_yaxes(range=[0, 100])
         st.markdown("##### RSI روی قیمت دلاری (حذف نوسان تتر)")
         st.plotly_chart(base_layout(fig, 170), width="stretch")

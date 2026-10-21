@@ -29,8 +29,8 @@ from src.config import LOG_DIR, SCAN_LOG, settings
 from src.db import DB, now_iso
 from src.llm.client import get_llm
 from src.market_data import add_indicators, load_history, resample, snapshot
-from src.strategy import (SETUP_BASE_RATES, StrategyParams, build_signal, entry_flags, latest_signal,
-                          passes_edge_filter, round_trip_cost, usd_frame)
+from src.strategy import (SETUP_BASE_RATES, StrategyParams, ensemble_signals, make_signal, round_trip_cost,
+                          usd_frame)
 from src.wallex_client import WallexClient, WallexError
 
 log = logging.getLogger("engine")
@@ -90,14 +90,24 @@ class Engine:
                 df = df[~df.index.duplicated(keep="last")].sort_index()
             self.m1[sym] = df[df.index >= pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=5)]
 
-    def frames(self, sym: str):
-        """Closed 15m bars only (drop the bar still forming)."""
-        cutoff = pd.Timestamp.now(tz="UTC").floor(TF)
-        usdt = add_indicators(resample(self.m1["USDTTMN"], TF))
-        usdt = usdt[usdt.index < cutoff]
-        px = add_indicators(resample(self.m1[sym], TF))
-        px = px[px.index < cutoff]
-        return px, usd_frame(px, usdt), usdt
+    def all_frames(self):
+        """Closed bars only: 15m TMN/USD frames, 1h USD frames, 15m USDT frame."""
+        now = pd.Timestamp.now(tz="UTC")
+        u15 = add_indicators(resample(self.m1["USDTTMN"], "15min"))
+        u15 = u15[u15.index < now.floor("15min")]
+        u60 = add_indicators(resample(self.m1["USDTTMN"], "60min"))
+        u60 = u60[u60.index < now.floor("60min")]
+        px15, sig15, sig60 = {}, {}, {}
+        for s in self.symbols:
+            try:
+                p15 = add_indicators(resample(self.m1[s], "15min"))
+                px15[s] = p15[p15.index < now.floor("15min")]
+                sig15[s] = usd_frame(px15[s], u15)
+                p60 = add_indicators(resample(self.m1[s], "60min"))
+                sig60[s] = usd_frame(p60[p60.index < now.floor("60min")], u60)
+            except Exception as e:  # one bad market must not block the others
+                log.warning("frames %s: %s", s, e)
+        return px15, sig15, sig60, u15
 
     def usdt_1h_pct(self) -> float | None:
         if len(self.usdt_mid) < 2:
@@ -149,8 +159,8 @@ class Engine:
         qty = tmn / sig["price"]
         o = self.broker.place_limit_buy(symbol, qty, sig["price"], "entry",
                                         {"stop": sig["stop"], "target": sig["target"], "kind": sig["kind"],
-                                         "ref_price": sig["price"],
-                                         "atr": (sig["price"] - sig["stop"]) / self.p.atr_stop})
+                                         "ref_price": sig["price"], "atr": sig["atr_tmn"], "hold_h": sig["hold_h"],
+                                         "trail_act": sig["trail_act"], "trail_mult": sig["trail_atr"]})
         log.info("ENTRY order %s %s %.0f TMN @ %.0f -> %s", o["client_id"], symbol, tmn, sig["price"], o["status"])
         if o["status"] == "FILLED":
             self.open_position_from_order(o)
@@ -166,7 +176,8 @@ class Engine:
         self.db.upsert_position({"symbol": o["symbol"], "qty": qty, "entry": fill, "stop": meta["stop"] * scale,
                                  "target": meta["target"] * scale, "atr": meta["atr"], "opened": now_iso(),
                                  "kind": meta["kind"], "cost_tmn": qty * fill / (1 - settings.fees.taker),
-                                 "trailing": 0, "decision_id": o["client_id"]})
+                                 "trailing": 0, "decision_id": o["client_id"], "hold_h": meta.get("hold_h", 4),
+                                 "trail_act": meta.get("trail_act"), "trail_mult": meta.get("trail_mult")})
         self.db.put("last_entry_at", now_iso())
         self.db.event("TRADE", f"opened {o['symbol']} qty={qty} @ {fill:.0f}")
         log.info("POSITION opened %s qty=%s @ %.0f", o["symbol"], qty, fill)
@@ -264,17 +275,18 @@ class Engine:
                 self.close_position(pos, "take_profit",
                                     f"حد سود محقق شد: قیمت {bid:,.0f} ≥ هدف {pos['target']:,.0f} (ورود {pos['entry']:,.0f}).", bid)
                 continue
-            if held >= BAR * self.p.max_hold_bars:
+            hold_h = pos.get("hold_h") or 4
+            if held >= timedelta(hours=hold_h):
                 self.close_position(pos, "time_exit",
-                                    f"خروج زمانی: {self.p.max_hold_bars // 4} ساعت از ورود گذشت و لبه آماری setup مصرف شد.", bid)
+                                    f"خروج زمانی: {hold_h:g} ساعت از ورود گذشت و لبه آماری setup ({pos['kind']}) مصرف شد.", bid)
                 continue
             changed = False
-            if not pos["trailing"] and bid >= pos["entry"] + self.p.trail_activate_atr * pos["atr"]:
+            if pos.get("trail_act") and not pos["trailing"] and bid >= pos["entry"] + pos["trail_act"] * pos["atr"]:
                 pos["trailing"] = 1
                 changed = True
             if pos["trailing"]:
                 floor = min(pos["entry"] * (1 + round_trip_cost(sym)), bid * 0.999)
-                new_stop = max(pos["stop"], bid - self.p.trail_atr * pos["atr"], floor)
+                new_stop = max(pos["stop"], bid - (pos.get("trail_mult") or 2.0) * pos["atr"], floor)
                 changed |= new_stop > pos["stop"]
                 pos["stop"] = new_stop
             if shock:
@@ -290,62 +302,70 @@ class Engine:
     def scan(self) -> None:
         self.refresh_candles()
         pf = self.portfolio()
+        now = pd.Timestamp.now(tz="UTC")
+        px15, sig15, sig60, u15 = self.all_frames()
+        signals, diag = ensemble_signals(px15, sig15, sig60, u15, now, self.p)
+
+        # activity probe: no entry for PROBE_AFTER -> allow one small, debated entry on the most oversold coin
         last_entry = self.db.get("last_entry_at") or self.db.get("started_at")
-        probe_due = utcnow() - datetime.fromisoformat(last_entry.replace("Z", "+00:00")) > PROBE_AFTER
-        rows = []
-        for sym in self.symbols:
-            try:
-                px, sig, usdt = self.frames(sym)
-            except Exception as e:  # missing data must not stop other symbols
-                log.warning("frames %s: %s", sym, e)
+        if not signals and utcnow() - datetime.fromisoformat(last_entry.replace("Z", "+00:00")) > PROBE_AFTER:
+            cands = [(sig15[s]["rsi"].iloc[-1], s) for s in sig15 if sig15[s]["rsi"].iloc[-1] < PROBE_RSI]
+            if cands:
+                _, sym = min(cands)
+                signals = [make_signal(sym, "probe_oversold", sig15[sym].iloc[-1], float(px15[sym]["close"].iloc[-1]),
+                                       "mr", sig15[sym].index[-1])]
+                diag[sym]["status"] = "probe"
+
+        seen = set(self.db.get("seen_signals", []))
+        for s in signals:
+            key = f"{s.kind}|{s.symbol}|{s.bar}"
+            if key in seen:
+                continue                                    # each signal bar is debated once, even after restarts
+            seen.add(key)
+            self.db.put("seen_signals", sorted(seen)[-500:])
+            if s.symbol in self.db.positions() or any(o["symbol"] == s.symbol for o in self.db.open_orders()):
                 continue
-            s, status = latest_signal(sym, px, sig, usdt, self.p)
-            probe = False
-            if s is None and status != "usdt_shock" and probe_due:
-                # activity probe: relaxed oversold threshold, small size, still debated by agents
-                pp = StrategyParams(capit_rsi=PROBE_RSI)
-                if entry_flags(sig, pp).iloc[-1]:
-                    cand = build_signal(sym, sig.iloc[-1], "oversold", pp, float(px["close"].iloc[-1]))
-                    if passes_edge_filter(cand, pp):
-                        s, status, probe = cand, "probe", True
-            snap_usd = snapshot(sig)
-            rows.append({"symbol": sym, "price": float(px["close"].iloc[-1]), "rsi_usd": snap_usd["rsi"],
-                         "ret_24h_usd": snap_usd["ret_24h_pct"], "status": status})
-            if s is None:
-                continue
-            if sym in self.db.positions() or any(o["symbol"] == sym for o in self.db.open_orders()):
-                continue
-            cd = self.db.get(f"cooldown_{sym}")
+            cd = self.db.get(f"cooldown_{s.symbol}")
             if cd and utcnow() < datetime.fromisoformat(cd):
                 continue
-            if pf["dd_pct"] / 100 >= settings.risk.hard_stop_dd or (self.end and utcnow() >= self.end - timedelta(
-                    minutes=settings.liquidate_minutes_before_end + 60)):
+            if pf["dd_pct"] / 100 >= settings.risk.hard_stop_dd or pf["open_positions"] >= settings.risk.max_open_positions:
+                continue
+            if self.end and utcnow() >= self.end - timedelta(minutes=settings.liquidate_minutes_before_end + 60):
                 continue
             try:
-                ob = self.broker.book(sym)
+                ob = self.broker.book(s.symbol)
             except WallexError:
                 ob = {}
+            snap_usd = snapshot(sig15[s.symbol])
             snap_usd.pop("price", None)
             snap_usd.update(spread_pct=round(ob.get("spread_pct") or 0, 3),
-                            ob_imbalance=round(ob["ob_imbalance"], 2) if ob.get("ob_imbalance") else None)
-            recent = self.db.rows("SELECT pnl_pct, exit_reason FROM trades WHERE symbol=? ORDER BY id DESC LIMIT 3", (sym,))
-            state = {"symbol": sym, "setup": s.kind, "signal": s.to_dict(), "market": snap_usd, "portfolio": pf,
-                     "context": {"usdt_1h_pct": self.usdt_1h_pct(), "probe": probe,
-                                 "setup_base_rate": SETUP_BASE_RATES.get(s.kind, ""),
+                            ob_imbalance=round(ob["ob_imbalance"], 2) if ob.get("ob_imbalance") else None,
+                            r4h_usd_pct=diag[s.symbol].get("r4h_usd"), z_1h=diag[s.symbol].get("z_1h"),
+                            max_hold_h=s.hold_h, trailing_stop=bool(s.trail_act))
+            recent = self.db.rows("SELECT pnl_pct, exit_reason FROM trades WHERE symbol=? ORDER BY id DESC LIMIT 3",
+                                  (s.symbol,))
+            state = {"symbol": s.symbol, "setup": s.kind, "signal": s.to_dict(), "market": snap_usd, "portfolio": pf,
+                     "context": {"usdt_1h_pct": self.usdt_1h_pct(), "probe": s.kind == "probe_oversold",
+                                 "setup_base_rate": SETUP_BASE_RATES.get(s.kind, "relaxed activity probe, no proven edge"),
                                  "recent_trades_symbol": [f"{r['pnl_pct']:+.2f}% {r['exit_reason']}" for r in recent] or "none"},
                      "llm_calls": []}
-            log.info("SIGNAL %s %s%s -> waking agents", sym, s.reason, " [probe]" if probe else "")
+            log.info("SIGNAL %s %s -> waking agents", s.symbol, s.reason)
             out = get_graph().invoke(state, config={"configurable": {"execute": self.execute_entry, "db": self.db}})
             d = out["decision"]
-            log.info("DECISION %s %s conf=%.2f | %s", sym, d["action"], d["confidence"],
+            log.info("DECISION %s %s conf=%.2f | %s", s.symbol, d["action"], d["confidence"],
                      d["agent_debate"]["risk_assessment"][:160])
             pf = self.portfolio()
+
+        rows = [{"symbol": s, "price": float(px15[s]["close"].iloc[-1]), "rsi_usd": diag[s].get("rsi_usd"),
+                 "z_1h": diag[s].get("z_1h"), "r4h_usd": diag[s].get("r4h_usd"),
+                 "status": diag[s].get("status", "no_setup")} for s in px15]
         scan = {"ts": now_iso(), "rows": rows, "portfolio": pf, "llm_budget": get_llm().budget.summary()}
         self.db.put("last_scan", scan)
         with open(SCAN_LOG, "a", encoding="utf-8") as f:
             f.write(json.dumps(scan, ensure_ascii=False) + "\n")
         log.info("SCAN %s | equity=%.0f dd=%.2f%% pos=%d | %s", scan["ts"], pf["equity"], pf["dd_pct"],
-                 pf["open_positions"], " ".join(f"{r['symbol'][:-3]}:{r['rsi_usd']}/{r['status']}" for r in rows))
+                 pf["open_positions"], " ".join(f"{r['symbol'][:-3]}:{r['rsi_usd']}/{r['z_1h']}/{r['status'][:6]}"
+                                                for r in rows))
 
     # ========================================================== liquidation
     def liquidate_all(self, why: str) -> None:

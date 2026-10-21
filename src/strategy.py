@@ -15,17 +15,21 @@ Design decisions (see README):
 """
 from __future__ import annotations
 
+import json
 from dataclasses import asdict, dataclass
 
 import numpy as np
 import pandas as pd
 
-from src.config import settings
+from src.config import ROOT, settings
 from src.market_data import add_indicators
 
 # Typical half-spread per market (fraction), measured from live books; used as slippage.
 HALF_SPREAD = {"BTCTMN": 0.0001, "ETHTMN": 0.0004, "SOLTMN": 0.001, "XRPTMN": 0.0012,
                "DOGETMN": 0.0007, "USDTTMN": 0.0002}
+_hs_file = ROOT / "reports" / "half_spreads.json"
+if _hs_file.exists():   # measured for the whole research universe by scripts/research.py
+    HALF_SPREAD.update({k: max(v, HALF_SPREAD.get(k, 0.0)) for k, v in json.loads(_hs_file.read_text()).items()})
 
 
 @dataclass
@@ -49,6 +53,13 @@ class StrategyParams:
 
 # Base rates from scripts/run_backtest.py + event study (27 days of Wallex 15m data), shown to the agents.
 SETUP_BASE_RATES = {
+    "zscore_1h": "1h close >3 std below its 48h mean (USD basis), walk-forward OUT-OF-SAMPLE: win-rate 71%, "
+                 "avg +1.4%/trade net (n=17 over 11 coins); also positive in training. Mean-reversion, exits within 4h",
+    "xs_reversal": "coin with the worst 4h USD return in the 14-coin universe and below -5%: OUT-OF-SAMPLE win-rate 54%, "
+                   "avg +2.3%/trade net (n=13), positive in 78% of parameter variants; gains mostly from volatile "
+                   "meme coins; trailing stop, holds up to 24h",
+    "oversold_rsi20": "first 15m bar with USD-basis RSI<20: OUT-OF-SAMPLE win-rate 62%, avg +0.9%/trade (n=8); "
+                      "trailing stop, holds up to 24h",
     "oversold": "first 15m bar with USD-basis RSI<25: mean fwd 4h return +1.34% gross (n=120 bars), "
                 "backtest net win-rate 56%; edge weakens when 24h drop exceeds ~6% or during USDT shocks",
     "pullback": "RSI dip inside uptrend: historically weak after fees (few samples)",
@@ -66,6 +77,11 @@ class Signal:
     expected_move_pct: float
     cost_pct: float
     reason: str
+    hold_h: float = 4.0                    # time exit
+    trail_act: float | None = None         # trailing activation (ATR multiples of profit)
+    trail_atr: float | None = None         # trailing distance (ATR)
+    atr_tmn: float = 0.0                   # ATR of the signal timeframe, in TMN
+    bar: str = ""                          # signal bar timestamp (dedupe key)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -152,3 +168,79 @@ def position_size_tmn(equity: float, price: float, stop: float, dd: float) -> fl
     if dd >= r.circuit_breaker_dd:
         size *= 0.5
     return float(np.floor(size)) if size >= r.min_order_tmn else 0.0
+
+
+# ====================================================================== ensemble
+# Chosen by scripts/research.py (walk-forward) + scripts/ensemble_check.py (portfolio level).
+EXIT_PROFILES = {
+    "mr":    dict(stop_atr=2.5, tp_atr=4.0, hold_h=4, trail_act=None, trail_atr=None),
+    "trend": dict(stop_atr=2.0, tp_atr=10.0, hold_h=24, trail_act=2.0, trail_atr=2.0),
+}
+ENSEMBLE_PRIORITY = ["xs_reversal", "zscore_1h", "oversold_rsi20"]
+XS_DROP = 0.05
+
+
+def make_signal(symbol: str, kind: str, sig_row: pd.Series, price: float, exit_name: str, bar) -> Signal:
+    ex = EXIT_PROFILES[exit_name]
+    a = float(sig_row["atr_pct"]) * price
+    stop, target = price - ex["stop_atr"] * a, price + ex["tp_atr"] * a
+    cost = round_trip_cost(symbol, True)
+    move = target / price - 1
+    reason = (f"{kind}: RSI(usd) {sig_row['rsi']:.0f}, {((sig_row['close'] / sig_row['ema_trend']) - 1) * 100:+.2f}% vs EMA96, "
+              f"ATR {sig_row['atr_pct'] * 100:.2f}%, stop -{ex['stop_atr'] * a / price * 100:.2f}% "
+              f"target +{move * 100:.2f}% hold<= {ex['hold_h']}h, cost {cost * 100:.2f}%")
+    return Signal(symbol, kind, price, stop, target, move * 100, cost * 100, reason,
+                  hold_h=ex["hold_h"], trail_act=ex["trail_act"], trail_atr=ex["trail_atr"], atr_tmn=a, bar=str(bar))
+
+
+def ensemble_signals(px15: dict, sig15: dict, sig60: dict, usdt15: pd.DataFrame,
+                     now: pd.Timestamp, p: StrategyParams | None = None) -> tuple[list[Signal], dict]:
+    """Signals on the last closed bars + per-symbol diagnostics for the scan log.
+
+    The 1h z-score only fires right after its hour closes (fresh), never on a stale bar.
+    """
+    from src.research.strategies import s_rsi_oversold, s_zscore   # same code as the research
+
+    p = p or StrategyParams()
+    diag = {s: {} for s in px15}
+    shock = bool(usdt_shock(usdt15, p).iloc[-1])
+    out: list[Signal] = []
+
+    # cross-sectional reversal (15m, needs the whole universe on a common index)
+    idx = None
+    for d in sig15.values():
+        idx = d.index if idx is None else idx.intersection(d.index)
+    r4 = pd.DataFrame({s: d["close"].reindex(idx).pct_change(16) for s, d in sig15.items()})
+    worst = r4.eq(r4.min(axis=1), axis=0) & (r4 < -XS_DROP)
+    for s in sig15:
+        diag[s]["r4h_usd"] = round(float(r4[s].iloc[-1]) * 100, 2) if pd.notna(r4[s].iloc[-1]) else None
+        fl = worst[s] & ~worst[s].shift(1, fill_value=False)
+        if bool(fl.iloc[-1]) and idx[-1] == sig15[s].index[-1]:
+            out.append(make_signal(s, "xs_reversal", sig15[s].iloc[-1], float(px15[s]["close"].iloc[-1]), "trend", idx[-1]))
+
+    for s in sig15:
+        d15 = sig15[s]
+        diag[s]["rsi_usd"] = round(float(d15["rsi"].iloc[-1]), 1)
+        if bool(s_rsi_oversold(d15, rsi_th=20).iloc[-1]):
+            out.append(make_signal(s, "oversold_rsi20", d15.iloc[-1], float(px15[s]["close"].iloc[-1]), "trend", d15.index[-1]))
+        d60 = sig60.get(s)
+        if d60 is not None and len(d60) > 60:
+            z = (d60["close"] - d60["close"].rolling(48).mean()) / d60["close"].rolling(48).std()
+            diag[s]["z_1h"] = round(float(z.iloc[-1]), 2)
+            fresh = now - (d60.index[-1] + pd.Timedelta("60min")) < pd.Timedelta("15min")
+            if fresh and bool(s_zscore(d60, z0=3.0).iloc[-1]):
+                out.append(make_signal(s, "zscore_1h", d60.iloc[-1], float(px15[s]["close"].iloc[-1]), "mr", d60.index[-1]))
+
+    rank = {k: i for i, k in enumerate(ENSEMBLE_PRIORITY)}
+    out.sort(key=lambda x: rank[x.kind])
+    if shock:
+        for x in out:
+            diag[x.symbol]["status"] = f"usdt_shock({x.kind})"
+        return [], diag
+    kept = []
+    for x in out:
+        ok = x.expected_move_pct >= p.edge_multiple * x.cost_pct
+        diag[x.symbol]["status"] = x.kind if ok else f"edge_too_small({x.kind})"
+        if ok and x.symbol not in {k.symbol for k in kept}:
+            kept.append(x)
+    return kept, diag

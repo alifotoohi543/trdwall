@@ -65,7 +65,9 @@ class Settings:
     mode: str = os.getenv("TRADING_MODE", "SHADOW").upper()
     wallex_base_url: str = "https://api.wallex.ir"
     wallex_api_key: str = os.getenv("WALLEX_API_KEY", "")
-    symbols: tuple[str, ...] = ("BTCTMN", "ETHTMN", "SOLTMN", "XRPTMN", "DOGETMN")
+    # liquid allowed markets (24h volume >= 4B TMN, spread <= 0.3%); challenge-excluded list in data/excluded_bases.txt
+    symbols: tuple[str, ...] = ("BTCTMN", "ETHTMN", "SOLTMN", "XRPTMN", "DOGETMN", "BNBTMN", "ADATMN", "LTCTMN",
+                                "PEPETMN", "PUMPTMN", "HYPETMN", "SANDTMN", "XAUTTMN", "USOONTMN")
     reference_symbols: tuple[str, ...] = ("USDTTMN", "BTCUSDT", "ETHUSDT")
     timeframe: str = "15min"
     loop_interval_s: int = 60              # fast loop (stops, triggers)
