@@ -32,6 +32,7 @@ from src.market_data import add_indicators, load_history, resample, snapshot
 from src.strategy import (SETUP_BASE_RATES, StrategyParams, ensemble_signals, make_signal, round_trip_cost,
                           usd_frame)
 from src.wallex_client import WallexClient, WallexError
+from src.wallex_mcp import account_snapshot, trade_flow
 
 log = logging.getLogger("engine")
 TF = "15min"
@@ -347,7 +348,8 @@ class Engine:
                             ob_imbalance=round(ob["ob_imbalance"], 2) if ob.get("ob_imbalance") else None,
                             r4h_usd_pct=diag[s.symbol].get("r4h_usd"), z_1h=diag[s.symbol].get("z_1h"),
                             r24h_usd_pct=diag[s.symbol].get("r24h_usd"), supertrend_4h=diag[s.symbol].get("st_4h"),
-                            max_hold_h=s.hold_h, trailing_stop=bool(s.trail_act))
+                            max_hold_h=s.hold_h, trailing_stop=bool(s.trail_act),
+                            mcp_trade_flow=trade_flow(s.symbol))   # live order flow via Wallex MCP
             recent = self.db.rows("SELECT pnl_pct, exit_reason FROM trades WHERE symbol=? ORDER BY id DESC LIMIT 3",
                                   (s.symbol,))
             state = {"symbol": s.symbol, "setup": s.kind, "signal": s.to_dict(), "market": snap_usd, "portfolio": pf,
@@ -366,13 +368,47 @@ class Engine:
                  "z_1h": diag[s].get("z_1h"), "r4h_usd": diag[s].get("r4h_usd"),
                  "st_4h": diag[s].get("st_4h"), "r24h_usd": diag[s].get("r24h_usd"),
                  "status": diag[s].get("status", "no_setup")} for s in px15]
-        scan = {"ts": now_iso(), "rows": rows, "portfolio": pf, "llm_budget": get_llm().budget.summary()}
+        mcp = self.mcp_reconcile()
+        scan = {"ts": now_iso(), "rows": rows, "portfolio": pf, "llm_budget": get_llm().budget.summary(), "mcp": mcp}
         self.db.put("last_scan", scan)
         with open(SCAN_LOG, "a", encoding="utf-8") as f:
             f.write(json.dumps(scan, ensure_ascii=False) + "\n")
-        log.info("SCAN %s | equity=%.0f dd=%.2f%% pos=%d | %s", scan["ts"], pf["equity"], pf["dd_pct"],
-                 pf["open_positions"], " ".join(f"{r['symbol'][:-3]}:{r['rsi_usd']}/{r['z_1h']}/{r['status'][:6]}"
+        log.info("SCAN %s | equity=%.0f dd=%.2f%% pos=%d mcp=%s | %s", scan["ts"], pf["equity"], pf["dd_pct"],
+                 pf["open_positions"], {True: "ok", False: "MISMATCH", None: "n/a"}[mcp.get("ok")], " ".join(f"{r['symbol'][:-3]}:{r['rsi_usd']}/{r['z_1h']}/{r['status'][:6]}"
                                                 for r in rows))
+
+    # ================================================================== MCP
+    def mcp_reconcile(self) -> dict:
+        """Cross-check the engine's state with the account as reported by the Wallex MCP server."""
+        snap = account_snapshot()
+        if snap is None:
+            return {"ok": None, "issue": "mcp_unavailable"}
+        bal = snap["balances"]
+        out = {"tmn": bal.get("TMN", (0.0, 0.0))[0], "open_orders": snap["open_orders"],
+               "assets": sorted(a for a in bal if a != "TMN")}
+        if settings.mode != "LIVE":
+            out["ok"] = None                     # SHADOW positions are virtual: report the real account only
+            return out
+        issues = []
+        db_open = len(self.db.open_orders())
+        if snap["open_orders"] is not None and snap["open_orders"] != db_open:
+            issues.append(f"open orders: exchange {snap['open_orders']} vs engine {db_open}")
+        positions = self.db.positions()
+        for sym, pos in positions.items():
+            have = bal.get(sym.removesuffix("TMN"), (0.0, 0.0))[0]
+            if have < pos["qty"] * 0.98:
+                issues.append(f"{sym}: exchange holds {have:g} < engine position {pos['qty']:g}")
+        for asset, (val, _) in bal.items():
+            sym = f"{asset}TMN"
+            if asset == "TMN" or sym in positions or sym not in self.m1:
+                continue
+            if val * float(self.m1[sym]["close"].iloc[-1]) > 100_000:
+                issues.append(f"untracked holding {asset} {val:g}")
+        out["ok"], out["issues"] = not issues, issues
+        if issues:
+            log.warning("MCP reconcile mismatch: %s", issues)
+            self.db.event("MCP", "reconcile mismatch: " + "; ".join(issues))
+        return out
 
     # ========================================================== liquidation
     def liquidate_all(self, why: str) -> None:

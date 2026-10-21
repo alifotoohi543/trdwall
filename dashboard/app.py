@@ -98,7 +98,9 @@ def status_bar():
     scan = kv("last_scan") or {}
     left = end - datetime.now(timezone.utc) if end else None
     c1, c2, c3 = st.columns(3)
-    c1.metric("Mode", settings.mode)
+    mcp = scan.get("mcp") or {}
+    mcp_txt = {True: " · MCP ✅", False: " · MCP ⚠️", None: " · MCP —"}.get(mcp.get("ok"), "")
+    c1.metric("Mode", settings.mode + mcp_txt)
     c2.metric("زمان باقی‌مانده", f"{int(left.total_seconds() // 3600)}h {int(left.total_seconds() % 3600 // 60)}m"
               if left and left.total_seconds() > 0 else "پایان")
     c3.metric("آخرین اسکن (UTC)", (scan.get("ts") or "—")[11:19])
