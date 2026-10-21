@@ -47,9 +47,9 @@ class FeeConfig:
 @dataclass(frozen=True)
 class RiskConfig:
     initial_capital_tmn: float = 5_000_000
-    max_position_frac: float = 0.25        # never more than 25% of equity in one position
+    max_position_frac: float = 0.18        # never more than 18% of equity in one position (4 slots)
     max_total_exposure_frac: float = 0.75  # at most 75% of equity in crypto at once
-    max_open_positions: int = 3
+    max_open_positions: int = 4            # universe_check: 4x18% beat 3x25% with equal drawdown
     risk_per_trade_frac: float = 0.01      # equity lost if stop-loss hits
     circuit_breaker_dd: float = 0.03       # drawdown that halves position sizes
     hard_stop_dd: float = 0.06             # drawdown that halts new entries
