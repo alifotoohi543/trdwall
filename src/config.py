@@ -71,7 +71,7 @@ class Settings:
     reference_symbols: tuple[str, ...] = ("USDTTMN", "BTCUSDT", "ETHUSDT")
     timeframe: str = "15min"
     loop_interval_s: int = 60              # fast loop (stops, triggers)
-    liquidate_minutes_before_end: int = 30
+    liquidate_minutes_before_end: int = 60   # buffer for retries if the network is flaky at the end
     challenge_end_utc: str = os.getenv("CHALLENGE_END_UTC", "")  # e.g. 2026-10-27T20:30:00Z
     llm: LLMConfig = field(default_factory=LLMConfig)
     fees: FeeConfig = field(default_factory=FeeConfig)
