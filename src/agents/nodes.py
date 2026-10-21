@@ -156,10 +156,14 @@ def risk_node(state: TradingState) -> dict:
     size = 0.0
     if approved:
         base = position_size_tmn(pf["equity"], sig["price"], sig["stop"], dd)
-        # agents modulate size between 30% and 100% of the risk-based size; they never enlarge it
-        factor = max(0.3, min(1.0, 0.5 + (p - 0.5) * 2 - 0.4 * bear["severity"] + 0.2))
-        if arb is not None:
-            factor = min(factor, arb["size_factor"])
+        # Size comes from the risk model, not from LLM confidence: the point-in-time replay
+        # (scripts/agent_replay.py) found confidence uncorrelated / negatively correlated with outcomes.
+        # Agents can only halve the size when they flag a concrete serious risk.
+        factor = 1.0
+        if bear["severity"] >= 0.7:
+            factor = 0.5
+        if arb is not None and arb["size_factor"] < 0.5:
+            factor = 0.5
         if state["context"].get("probe"):
             factor = min(factor, 0.4)                       # activity probe trades stay small
         room = pf["equity"] * r.max_total_exposure_frac - pf["exposure_tmn"]
@@ -169,7 +173,7 @@ def risk_node(state: TradingState) -> dict:
             reasons.append(f"حجم مجاز ({size:,.0f} تومان) کمتر از حداقل سفارش است")
         else:
             reasons.append(f"مجوز ورود با {size:,.0f} تومان ({size / pf['equity']:.1%} سرمایه)، "
-                           f"ضریب اطمینان {factor:.2f}، افت فعلی حساب {dd:.2%}، "
+                           f"ضریب حجم {factor:.1f}، افت فعلی حساب {dd:.2%}، "
                            f"ریسک تا حد ضرر {(1 - sig['stop'] / sig['price']) * size:,.0f} تومان")
     return {"risk": {"approved": approved, "size_tmn": size if approved else 0.0, "assessment": "؛ ".join(reasons)}}
 

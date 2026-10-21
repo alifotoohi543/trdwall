@@ -1,41 +1,41 @@
 window: last 3 days -> 24 signals (evaluated independently, fresh portfolio)
-[ 1/24] 10-18 19:45 PUMPTMN  xs_reversal     -> BUY  conf=0.36 | outcome: 11.646 take_profit
+[ 1/24] 10-18 19:45 PUMPTMN  xs_reversal     -> BUY  conf=0.47 | outcome: 11.646 take_profit
 [ 2/24] 10-18 20:00 ETHTMN   zscore_1h       -> BUY  conf=0.48 | outcome: 2.231 time_exit
-[ 3/24] 10-18 20:00 XRPTMN   zscore_1h       -> BUY  conf=0.42 | outcome: 3.738 take_profit
-[ 4/24] 10-18 20:00 DOGETMN  zscore_1h       -> BUY  conf=0.57 | outcome: 3.775 take_profit
-[ 5/24] 10-18 20:00 LTCTMN   zscore_1h       -> BUY  conf=0.60 | outcome: 2.434 time_exit
-[ 6/24] 10-18 20:00 PUMPTMN  zscore_1h       -> BUY  conf=0.62 | outcome: 8.388 time_exit
-[ 7/24] 10-18 21:15 SANDTMN  xs_reversal     -> BUY  conf=0.46 | outcome: 10.198 take_profit
-[ 8/24] 10-19 08:45 SANDTMN  xs_reversal     -> BUY  conf=0.49 | outcome: -2.874 stop_loss
+[ 3/24] 10-18 20:00 XRPTMN   zscore_1h       -> BUY  conf=0.60 | outcome: 3.738 take_profit
+[ 4/24] 10-18 20:00 DOGETMN  zscore_1h       -> SKIP conf=0.40 | outcome: 3.775 take_profit
+[ 5/24] 10-18 20:00 LTCTMN   zscore_1h       -> BUY  conf=0.41 | outcome: 2.434 time_exit
+[ 6/24] 10-18 20:00 PUMPTMN  zscore_1h       -> BUY  conf=0.49 | outcome: 8.388 time_exit
+[ 7/24] 10-18 21:15 SANDTMN  xs_reversal     -> BUY  conf=0.49 | outcome: 10.198 take_profit
+[ 8/24] 10-19 08:45 SANDTMN  xs_reversal     -> BUY  conf=0.50 | outcome: -2.874 stop_loss
 [ 9/24] 10-19 10:30 SANDTMN  xs_reversal     -> BUY  conf=0.46 | outcome: 0.761 trailing_stop
-[10/24] 10-19 16:00 PEPETMN  momentum_4h     -> BUY  conf=0.72 | outcome: 1.08 time_exit
-[11/24] 10-19 20:00 PUMPTMN  momentum_4h     -> BUY  conf=0.43 | outcome: 2.156 time_exit
-[12/24] 10-20 04:00 PEPETMN  supertrend_4h   -> BUY  conf=0.76 | outcome: 5.551 trailing_stop
-[13/24] 10-20 16:00 PEPETMN  momentum_4h     -> BUY  conf=0.70 | outcome: -0.867 time_exit
-[14/24] 10-20 20:00 PUMPTMN  supertrend_4h   -> BUY  conf=0.77 | outcome: 3.729 time_exit
-[15/24] 10-21 04:00 HYPETMN  supertrend_4h   -> BUY  conf=0.72 | outcome: 0.257 time_exit
-[16/24] 10-21 08:00 XRPTMN   supertrend_4h   -> SKIP conf=0.20 | outcome: 3.61 open_mtm
-[17/24] 10-21 08:00 BNBTMN   supertrend_4h   -> BUY  conf=0.50 | outcome: 1.422 open_mtm
-[18/24] 10-21 08:00 PUMPTMN  momentum_4h     -> BUY  conf=0.77 | outcome: 2.145 open_mtm
-[19/24] 10-21 12:00 LTCTMN   supertrend_4h   -> BUY  conf=0.71 | outcome: 0.001 open_mtm
-[20/24] 10-21 12:00 PEPETMN  momentum_4h     -> BUY  conf=0.71 | outcome: 1.86 open_mtm
-[21/24] 10-21 16:00 BTCTMN   supertrend_4h   -> BUY  conf=0.66 | outcome: -0.641 open_mtm
-[22/24] 10-21 16:00 ETHTMN   supertrend_4h   -> BUY  conf=0.73 | outcome: -1.504 open_mtm
-[23/24] 10-21 16:00 DOGETMN  supertrend_4h   -> BUY  conf=0.74 | outcome: -1.496 open_mtm
-[24/24] 10-21 16:00 PUMPTMN  momentum_4h     -> BUY  conf=0.79 | outcome: -0.358 open_mtm
+[10/24] 10-19 16:00 PEPETMN  momentum_4h     -> BUY  conf=0.69 | outcome: 1.08 time_exit
+[11/24] 10-19 20:00 PUMPTMN  momentum_4h     -> BUY  conf=0.64 | outcome: 2.156 time_exit
+[12/24] 10-20 04:00 PEPETMN  supertrend_4h   -> BUY  conf=0.77 | outcome: 5.551 trailing_stop
+[13/24] 10-20 16:00 PEPETMN  momentum_4h     -> BUY  conf=0.69 | outcome: -0.867 time_exit
+[14/24] 10-20 20:00 PUMPTMN  supertrend_4h   -> BUY  conf=0.73 | outcome: 3.729 time_exit
+[15/24] 10-21 04:00 HYPETMN  supertrend_4h   -> BUY  conf=0.50 | outcome: 0.257 time_exit
+[16/24] 10-21 08:00 XRPTMN   supertrend_4h   -> BUY  conf=0.51 | outcome: 3.61 open_mtm
+[17/24] 10-21 08:00 BNBTMN   supertrend_4h   -> BUY  conf=0.60 | outcome: 1.422 open_mtm
+[18/24] 10-21 08:00 PUMPTMN  momentum_4h     -> BUY  conf=0.76 | outcome: 2.145 open_mtm
+[19/24] 10-21 12:00 LTCTMN   supertrend_4h   -> BUY  conf=0.78 | outcome: 0.001 open_mtm
+[20/24] 10-21 12:00 PEPETMN  momentum_4h     -> BUY  conf=0.77 | outcome: 1.86 open_mtm
+[21/24] 10-21 16:00 BTCTMN   supertrend_4h   -> BUY  conf=0.72 | outcome: -0.641 open_mtm
+[22/24] 10-21 16:00 ETHTMN   supertrend_4h   -> BUY  conf=0.82 | outcome: -1.504 open_mtm
+[23/24] 10-21 16:00 DOGETMN  supertrend_4h   -> BUY  conf=0.76 | outcome: -1.496 open_mtm
+[24/24] 10-21 16:00 PUMPTMN  momentum_4h     -> BUY  conf=0.77 | outcome: -0.358 open_mtm
 
 ================ RESULT ================
 signals: 24 | filled (limit reached): 24 | agent BUY 23 / SKIP 1
 take EVERY signal : win 75% | avg +2.39%/trade | PnL at 20% size +11.45% of capital
-agent-APPROVED    : win 74% | avg +2.33%/trade | PnL with agent sizes +8.08% of capital
-agent-REJECTED    : win 100% | avg +3.61%/trade (losses avoided if negative)
+agent-APPROVED    : win 74% | avg +2.32%/trade | PnL with agent sizes +11.28% of capital
+agent-REJECTED    : win 100% | avg +3.77%/trade (losses avoided if negative)
 decision accuracy (BUY->win, SKIP->loss): 71%
-mean confidence: winners 0.57 vs losers 0.68
+mean confidence: winners 0.59 vs losers 0.71
 by setup:
                n   win   avg  agent_buy
 setup                                  
 momentum_4h    6  0.67  1.00          6
-supertrend_4h  9  0.67  1.21          8
+supertrend_4h  9  0.67  1.21          9
 xs_reversal    4  0.75  4.93          4
-zscore_1h      5  1.00  4.11          5
-LLM cost of replay: $0.0142 | budget: {'total_usd': 0.02855, 'calls': 109, 'today_usd': 0.02855, 'remaining_usd': 0.3714}
+zscore_1h      5  1.00  4.11          4
+LLM cost of replay: $0.0189 | budget: {'total_usd': 0.04745, 'calls': 162, 'today_usd': 0.04745, 'remaining_usd': 0.3526}
