@@ -493,9 +493,25 @@ def setup_logging() -> None:
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
 
+def single_instance_lock():
+    """Bind a fixed localhost port for the process lifetime: a second engine on the same
+    production state would double every order, so it must refuse to start."""
+    import socket
+    if os.getenv("TRADER_DB"):
+        return None                          # isolated test/demo state: no lock needed
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        s.bind(("127.0.0.1", 47819))
+    except OSError:
+        print("Another trading engine is already running on this machine - refusing to start a second one.")
+        sys.exit(3)
+    return s
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--once", action="store_true")
     args = ap.parse_args()
+    _lock = single_instance_lock()
     setup_logging()
     Engine().run(once=args.once)
