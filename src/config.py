@@ -13,8 +13,10 @@ load_dotenv(ROOT / ".env")
 DATA_DIR = ROOT / "data"
 HIST_DIR = DATA_DIR / "historical"
 LOG_DIR = ROOT / "logs"
-DB_PATH = DATA_DIR / "trading_state.db"
-DECISION_LOG = LOG_DIR / "decision_logs.jsonl"
+# TRADER_DB / TRADER_DECISION_LOG let tests and demos use separate state without touching the live bot
+DB_PATH = Path(os.getenv("TRADER_DB") or DATA_DIR / "trading_state.db")
+DECISION_LOG = Path(os.getenv("TRADER_DECISION_LOG") or LOG_DIR / "decision_logs.jsonl")
+SCAN_LOG = Path(os.getenv("TRADER_SCAN_LOG") or LOG_DIR / "scan_log.jsonl")
 
 
 def _f(name: str, default: float) -> float:

@@ -25,7 +25,7 @@ import pandas as pd
 from src.agents.graph import get_graph
 from src.agents.state import AgentDebate, DecisionLog, Execution
 from src.broker.base import BaseBroker
-from src.config import LOG_DIR, settings
+from src.config import LOG_DIR, SCAN_LOG, settings
 from src.db import DB, now_iso
 from src.llm.client import get_llm
 from src.market_data import add_indicators, load_history, resample, snapshot
@@ -342,7 +342,7 @@ class Engine:
             pf = self.portfolio()
         scan = {"ts": now_iso(), "rows": rows, "portfolio": pf, "llm_budget": get_llm().budget.summary()}
         self.db.put("last_scan", scan)
-        with open(LOG_DIR / "scan_log.jsonl", "a", encoding="utf-8") as f:
+        with open(SCAN_LOG, "a", encoding="utf-8") as f:
             f.write(json.dumps(scan, ensure_ascii=False) + "\n")
         log.info("SCAN %s | equity=%.0f dd=%.2f%% pos=%d | %s", scan["ts"], pf["equity"], pf["dd_pct"],
                  pf["open_positions"], " ".join(f"{r['symbol'][:-3]}:{r['rsi_usd']}/{r['status']}" for r in rows))

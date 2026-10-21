@@ -5,17 +5,22 @@ stop-loss exit -> trade + decision logs -> end-of-challenge liquidation.
 Run: python -m tests.test_flow_shadow
 """
 import json
+import os
 import tempfile
 from datetime import timedelta
 from pathlib import Path
 
-import src.db as dbmod
-import src.engine as eng
-from src.agents import nodes
-from src.strategy import Signal
+# isolate all state BEFORE importing src modules (never touch the live bot's DB/logs)
+tmp = Path(os.getenv("TEST_STATE_DIR") or tempfile.mkdtemp())
+tmp.mkdir(parents=True, exist_ok=True)
+os.environ["TRADER_DB"] = str(tmp / "t.db")
+os.environ["TRADER_DECISION_LOG"] = str(tmp / "decisions.jsonl")
+os.environ["TRADER_SCAN_LOG"] = str(tmp / "scan.jsonl")
 
-tmp = Path(tempfile.mkdtemp())
-dbmod.DECISION_LOG = tmp / "decisions.jsonl"
+import src.db as dbmod  # noqa: E402
+import src.engine as eng  # noqa: E402
+from src.agents import nodes  # noqa: E402
+from src.strategy import Signal  # noqa: E402
 
 
 def fake_call(state, role, system, user, model=None):
@@ -27,10 +32,8 @@ def fake_call(state, role, system, user, model=None):
 
 nodes._call = fake_call
 e = eng.Engine()
-e.db = dbmod.DB(tmp / "t.db")
-e.broker.db = e.db
+assert str(e.db.conn.execute("PRAGMA database_list").fetchone()[2]).endswith("t.db")
 e.db.put("shadow_balances", {"TMN": 5_000_000})
-e.db.put("started_at", dbmod.now_iso())
 e.db.put("peak_equity", 5_000_000)
 
 ask = e.broker.book("BTCTMN")["ask"]
