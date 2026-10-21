@@ -7,3 +7,6 @@ data/historical/*.csv
 logs/*.jsonl
 logs/*.log
 data/llm_spend.json
+data/*.db-*
+data/shadow/
+logs/shadow/
