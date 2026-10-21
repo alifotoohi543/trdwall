@@ -14,6 +14,7 @@ from pathlib import Path
 # isolate all state BEFORE importing src modules (never touch the live bot's DB/logs)
 tmp = Path(os.getenv("TEST_STATE_DIR") or tempfile.mkdtemp())
 tmp.mkdir(parents=True, exist_ok=True)
+os.environ["TRADING_MODE"] = "SHADOW"          # NEVER let this test reach the real account (.env may say LIVE)
 os.environ["TRADER_DB"] = str(tmp / "t.db")
 os.environ["TRADER_DECISION_LOG"] = str(tmp / "decisions.jsonl")
 os.environ["TRADER_SCAN_LOG"] = str(tmp / "scan.jsonl")
@@ -33,6 +34,8 @@ def fake_call(state, role, system, user, model=None):
 
 nodes._call = fake_call
 e = eng.Engine()
+from src.broker.shadow_broker import ShadowBroker  # noqa: E402
+assert isinstance(e.broker, ShadowBroker), f"refusing to run the flow test on {type(e.broker).__name__}"
 assert str(e.db.conn.execute("PRAGMA database_list").fetchone()[2]).endswith("t.db")
 e.db.put("shadow_balances", {"TMN": 5_000_000})
 e.db.put("peak_equity", 5_000_000)

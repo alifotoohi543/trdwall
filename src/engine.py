@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import sys
 import time
 from collections import deque
@@ -49,6 +50,9 @@ def utcnow() -> datetime:
 
 def make_broker(db: DB, client: WallexClient) -> BaseBroker:
     if settings.mode == "LIVE":
+        # safety: tests/demos isolate their state with TRADER_DB; such runs must never trade real money
+        if os.getenv("TRADER_DB") and os.getenv("ALLOW_LIVE_WITH_CUSTOM_DB") != "1":
+            raise RuntimeError("LIVE mode with a custom TRADER_DB is refused (looks like a test run)")
         from src.broker.live_broker import LiveBroker
         return LiveBroker(db, client)
     from src.broker.shadow_broker import ShadowBroker
@@ -485,7 +489,7 @@ def setup_logging() -> None:
     sh.setFormatter(fmt)
     root.addHandler(fh)
     root.addHandler(sh)
-    for noisy in ("httpx", "openai", "httpcore"):
+    for noisy in ("httpx", "httpx2", "openai", "httpcore", "mcp"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
 
