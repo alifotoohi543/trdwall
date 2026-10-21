@@ -29,8 +29,8 @@ class LLMConfig:
     base_url: str = os.getenv("LLM_BASE_URL", "https://ai.boxapi.ir/ai/v1")
     model_fast: str = os.getenv("LLM_MODEL_FAST", "gpt-6-luna")
     model_strong: str = os.getenv("LLM_MODEL_STRONG", "gpt-6-sol")
-    budget_total_usd: float = _f("LLM_BUDGET_USD_TOTAL", 2.5)
-    budget_daily_usd: float = _f("LLM_BUDGET_USD_DAILY", 0.6)
+    budget_total_usd: float = _f("LLM_BUDGET_USD_TOTAL", 0.40)
+    budget_daily_usd: float = _f("LLM_BUDGET_USD_DAILY", 0.20)
     max_output_tokens: int = 400
     timeout_s: float = 45.0
 
