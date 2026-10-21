@@ -1,0 +1,25 @@
+signal_time,symbol,setup,agent_action,confidence,size_tmn,filled,ret_pct,exit_reason,bars,llm_cost,arbiter
+2026-10-18 19:45:00+00:00,PUMPTMN,xs_reversal,SKIP,0.464,0.0,True,11.646,take_profit,28,0.000257,False
+2026-10-18 20:00:00+00:00,ETHTMN,zscore_1h,SKIP,0.462,0.0,True,2.231,time_exit,16,0.002904,True
+2026-10-18 20:00:00+00:00,XRPTMN,zscore_1h,SKIP,0.504,0.0,True,3.738,take_profit,13,0.002867,True
+2026-10-18 20:00:00+00:00,DOGETMN,zscore_1h,BUY,0.585,1050000.0,True,3.775,take_profit,12,0.000245,False
+2026-10-18 20:00:00+00:00,LTCTMN,zscore_1h,BUY,0.575,1031250.0,True,2.434,time_exit,16,0.000251,False
+2026-10-18 20:00:00+00:00,PUMPTMN,zscore_1h,BUY,0.571,694599.0,True,8.388,time_exit,16,0.000243,False
+2026-10-18 21:15:00+00:00,SANDTMN,xs_reversal,SKIP,0.464,0.0,True,10.198,take_profit,24,0.000247,False
+2026-10-19 08:45:00+00:00,SANDTMN,xs_reversal,SKIP,0.454,0.0,True,-2.874,stop_loss,8,0.000255,False
+2026-10-19 10:30:00+00:00,SANDTMN,xs_reversal,SKIP,0.491,0.0,True,0.761,trailing_stop,14,0.000276,False
+2026-10-19 16:00:00+00:00,PEPETMN,momentum_4h,BUY,0.673,862991.0,True,1.08,time_exit,48,0.000258,False
+2026-10-19 20:00:00+00:00,PUMPTMN,momentum_4h,SKIP,0.515,0.0,True,2.156,time_exit,48,0.002709,True
+2026-10-20 04:00:00+00:00,PEPETMN,supertrend_4h,BUY,0.71,993617.0,True,5.551,trailing_stop,45,0.000244,False
+2026-10-20 16:00:00+00:00,PEPETMN,momentum_4h,BUY,0.712,901257.0,True,-0.867,time_exit,48,0.000253,False
+2026-10-20 20:00:00+00:00,PUMPTMN,supertrend_4h,BUY,0.677,580978.0,True,3.729,time_exit,48,0.000246,False
+2026-10-21 04:00:00+00:00,HYPETMN,supertrend_4h,BUY,0.619,1112500.0,True,0.257,time_exit,48,0.000246,False
+2026-10-21 08:00:00+00:00,XRPTMN,supertrend_4h,BUY,0.71,1237500.0,True,3.61,open_mtm,45,0.000251,False
+2026-10-21 08:00:00+00:00,BNBTMN,supertrend_4h,BUY,0.801,1250000.0,True,1.422,open_mtm,45,0.000256,False
+2026-10-21 08:00:00+00:00,PUMPTMN,momentum_4h,BUY,0.738,625356.0,True,2.145,open_mtm,45,0.000244,False
+2026-10-21 12:00:00+00:00,LTCTMN,supertrend_4h,BUY,0.75,1250000.0,True,0.001,open_mtm,29,0.000247,False
+2026-10-21 12:00:00+00:00,PEPETMN,momentum_4h,BUY,0.655,874839.0,True,1.86,open_mtm,29,0.00025,False
+2026-10-21 16:00:00+00:00,BTCTMN,supertrend_4h,BUY,0.692,1212500.0,True,-0.641,open_mtm,13,0.000244,False
+2026-10-21 16:00:00+00:00,ETHTMN,supertrend_4h,BUY,0.495,937500.0,True,-1.504,open_mtm,13,0.000187,False
+2026-10-21 16:00:00+00:00,DOGETMN,supertrend_4h,BUY,0.718,1250000.0,True,-1.496,open_mtm,13,0.000254,False
+2026-10-21 16:00:00+00:00,PUMPTMN,momentum_4h,BUY,0.773,632446.0,True,-0.358,open_mtm,13,0.00024,False

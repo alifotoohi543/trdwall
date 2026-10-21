@@ -41,9 +41,13 @@ BEAR_SYS = (
     'Reply JSON only: {"veto":true|false,"severity":0..1,"argument":"..."}. ' + FA)
 
 ARBITER_SYS = (
-    "You are the senior Portfolio Manager. The Bull and Bear disagree on a proposed long entry. Weigh both "
-    "arguments against the data and decide. Prefer capital preservation: scoring rewards realized return "
-    "but heavily penalizes drawdown. "
+    "You are the senior Portfolio Manager. The Bull and Bear disagree on a proposed long entry from a "
+    "statistically validated setup. Decide on EXPECTED VALUE, not on fear: EV = p*target_pct - (1-p)*|stop_pct| "
+    "- cost_pct, where p starts from the setup's base rate (context.setup_base_rate) and is adjusted only for "
+    "concrete evidence in this case. Note the payoff asymmetry: a 50% win-rate is profitable when the target is "
+    "several times the stop. REJECT only if EV is clearly negative or there is a hard red flag (USDT shock, "
+    "spread wider than the target allows, broken data); otherwise APPROVE and express doubt through size_factor "
+    "(0.3-1.0). Drawdown is capped separately by the Risk Guard. "
     'Reply JSON only: {"verdict":"APPROVE"|"REJECT","size_factor":0..1,"argument":"..."}. ' + FA)
 
 
@@ -122,16 +126,26 @@ def risk_node(state: TradingState) -> dict:
     dd = pf["dd_pct"] / 100
     reasons = []
     approved = True
-    if bull["stance"] != "BUY" or bull["confidence"] < 0.55:
+    # Expected value instead of a fixed confidence bar: a setup whose target is several times its stop is
+    # worth taking at ~50% hit probability (agent_replay showed a 0.55 bar rejected the best trades).
+    p = bull["confidence"]
+    tgt, stp, cost = sig["expected_move_pct"], abs((sig["stop"] / sig["price"] - 1) * 100), sig["cost_pct"]
+    ev = p * tgt - (1 - p) * stp - cost
+    if bull["stance"] != "BUY":
         approved = False
-        reasons.append(f"تحلیل‌گر صعودی قانع نشد (اطمینان {bull['confidence']:.2f})")
+        reasons.append(f"تحلیل‌گر صعودی ورود را پیشنهاد نکرد (اطمینان {p:.2f})")
+    elif ev <= 0:
+        approved = False
+        reasons.append(f"ارزش مورد انتظار منفی: {p:.2f}×{tgt:.2f}٪ − {1 - p:.2f}×{stp:.2f}٪ − هزینه {cost:.2f}٪ = {ev:+.2f}٪")
+    else:
+        reasons.append(f"ارزش مورد انتظار {ev:+.2f}٪ (احتمال {p:.2f}، هدف {tgt:.2f}٪، حد ضرر {stp:.2f}٪، هزینه {cost:.2f}٪)")
     if arb is not None:
         if arb["verdict"] != "APPROVE":
             approved = False
             reasons.append("داور ارشد ورود را رد کرد")
-    elif bear["veto"] and approved:
+    elif bear["veto"] and bear["severity"] >= 0.85 and approved:
         approved = False
-        reasons.append(f"منتقد وتو کرد (شدت {bear['severity']:.2f})")
+        reasons.append(f"منتقد با شدت بالا وتو کرد (شدت {bear['severity']:.2f})")
     if dd >= r.hard_stop_dd:
         approved = False
         reasons.append(f"افت حساب {dd:.1%} به سقف توقف {r.hard_stop_dd:.0%} رسیده")
@@ -142,7 +156,8 @@ def risk_node(state: TradingState) -> dict:
     size = 0.0
     if approved:
         base = position_size_tmn(pf["equity"], sig["price"], sig["stop"], dd)
-        factor = max(0.3, min(1.0, bull["confidence"] - 0.5 * bear["severity"] + 0.3))
+        # agents modulate size between 30% and 100% of the risk-based size; they never enlarge it
+        factor = max(0.3, min(1.0, 0.5 + (p - 0.5) * 2 - 0.4 * bear["severity"] + 0.2))
         if arb is not None:
             factor = min(factor, arb["size_factor"])
         if state["context"].get("probe"):
