@@ -71,6 +71,11 @@ class LiveBroker(BaseBroker):
         return self._submit(symbol, "BUY", qty, price, purpose, meta)
 
     def sell_now(self, symbol, qty, purpose, meta):
+        # fees are taken from the received coin, so never ask to sell more than the free balance
+        free = self.balances().get(symbol.removesuffix("TMN"), 0.0)
+        qty = min(qty, free)
+        if qty <= 0:
+            raise ValueError(f"no free {symbol} balance to sell")
         bid = self.book(symbol)["bid"]
         return self._submit(symbol, "SELL", qty, bid * (1 - EXIT_PROTECTION), purpose, meta)
 

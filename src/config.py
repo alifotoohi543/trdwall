@@ -38,8 +38,8 @@ class LLMConfig:
 @dataclass(frozen=True)
 class FeeConfig:
     # Wallex spot fees per side (fraction). Update from the challenge account's fee tier.
-    maker: float = _f("FEE_MAKER", 0.0020)
-    taker: float = _f("FEE_TAKER", 0.0025)
+    maker: float = _f("FEE_MAKER", 0.0025)
+    taker: float = _f("FEE_TAKER", 0.0030)
     # Minimum expected move must exceed this multiple of round-trip cost (fees + spread).
     edge_multiple: float = 2.5
 
