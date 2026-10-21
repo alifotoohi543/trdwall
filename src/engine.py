@@ -39,6 +39,7 @@ BAR = pd.Timedelta(TF)
 ENTRY_TTL = timedelta(minutes=15)        # unfilled limit entries are cancelled after one bar
 PROBE_AFTER = timedelta(hours=20)        # activity probe if no entry for this long
 PROBE_RSI = 32.0
+HISTORY_DAYS = 14                     # 1m history kept in memory (4h indicators need ~2 weeks)
 
 
 def utcnow() -> datetime:
@@ -78,8 +79,8 @@ class Engine:
             df = self.m1.get(sym)
             if df is None:
                 df = load_history(sym)
-                df = df[df.index >= pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=5)]
-            start = int(df.index[-1].timestamp()) - 1800 if len(df) else now - 5 * 86400
+                df = df[df.index >= pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=HISTORY_DAYS)]
+            start = int(df.index[-1].timestamp()) - 1800 if len(df) else now - HISTORY_DAYS * 86400
             try:
                 new = self.client.candles_1m(sym, start, now)
             except WallexError as e:
@@ -88,7 +89,7 @@ class Engine:
             if len(new):
                 df = pd.concat([df, new])
                 df = df[~df.index.duplicated(keep="last")].sort_index()
-            self.m1[sym] = df[df.index >= pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=5)]
+            self.m1[sym] = df[df.index >= pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=HISTORY_DAYS)]
 
     def all_frames(self):
         """Closed bars only: 15m TMN/USD frames, 1h USD frames, 15m USDT frame."""
@@ -97,7 +98,9 @@ class Engine:
         u15 = u15[u15.index < now.floor("15min")]
         u60 = add_indicators(resample(self.m1["USDTTMN"], "60min"))
         u60 = u60[u60.index < now.floor("60min")]
-        px15, sig15, sig60 = {}, {}, {}
+        u240 = add_indicators(resample(self.m1["USDTTMN"], "240min"))
+        u240 = u240[u240.index + pd.Timedelta("240min") <= now]
+        px15, sig15, sig60, sig240 = {}, {}, {}, {}
         for s in self.symbols:
             try:
                 p15 = add_indicators(resample(self.m1[s], "15min"))
@@ -105,9 +108,11 @@ class Engine:
                 sig15[s] = usd_frame(px15[s], u15)
                 p60 = add_indicators(resample(self.m1[s], "60min"))
                 sig60[s] = usd_frame(p60[p60.index < now.floor("60min")], u60)
+                p240 = add_indicators(resample(self.m1[s], "240min"))
+                sig240[s] = usd_frame(p240[p240.index + pd.Timedelta("240min") <= now], u240)
             except Exception as e:  # one bad market must not block the others
                 log.warning("frames %s: %s", s, e)
-        return px15, sig15, sig60, u15
+        return px15, sig15, sig60, u15, sig240
 
     def usdt_1h_pct(self) -> float | None:
         if len(self.usdt_mid) < 2:
@@ -303,8 +308,8 @@ class Engine:
         self.refresh_candles()
         pf = self.portfolio()
         now = pd.Timestamp.now(tz="UTC")
-        px15, sig15, sig60, u15 = self.all_frames()
-        signals, diag = ensemble_signals(px15, sig15, sig60, u15, now, self.p)
+        px15, sig15, sig60, u15, sig240 = self.all_frames()
+        signals, diag = ensemble_signals(px15, sig15, sig60, u15, now, self.p, sig240=sig240)
 
         # activity probe: no entry for PROBE_AFTER -> allow one small, debated entry on the most oversold coin
         last_entry = self.db.get("last_entry_at") or self.db.get("started_at")
@@ -341,6 +346,7 @@ class Engine:
             snap_usd.update(spread_pct=round(ob.get("spread_pct") or 0, 3),
                             ob_imbalance=round(ob["ob_imbalance"], 2) if ob.get("ob_imbalance") else None,
                             r4h_usd_pct=diag[s.symbol].get("r4h_usd"), z_1h=diag[s.symbol].get("z_1h"),
+                            r24h_usd_pct=diag[s.symbol].get("r24h_usd"), supertrend_4h=diag[s.symbol].get("st_4h"),
                             max_hold_h=s.hold_h, trailing_stop=bool(s.trail_act))
             recent = self.db.rows("SELECT pnl_pct, exit_reason FROM trades WHERE symbol=? ORDER BY id DESC LIMIT 3",
                                   (s.symbol,))
@@ -358,6 +364,7 @@ class Engine:
 
         rows = [{"symbol": s, "price": float(px15[s]["close"].iloc[-1]), "rsi_usd": diag[s].get("rsi_usd"),
                  "z_1h": diag[s].get("z_1h"), "r4h_usd": diag[s].get("r4h_usd"),
+                 "st_4h": diag[s].get("st_4h"), "r24h_usd": diag[s].get("r24h_usd"),
                  "status": diag[s].get("status", "no_setup")} for s in px15]
         scan = {"ts": now_iso(), "rows": rows, "portfolio": pf, "llm_budget": get_llm().budget.summary()}
         self.db.put("last_scan", scan)

@@ -25,8 +25,9 @@ FA = "Write the 'argument' field in Persian (Farsi), at most 35 words, citing th
 BULL_SYS = (
     "You are the Bull analyst of a crypto spot trading desk on Wallex (prices in toman, indicators "
     "computed on the USD price to strip out toman/USDT noise). A rule-based trigger proposes a LONG entry. "
-    "Judge it against the setup's historical base rate given in context.setup_base_rate (this setup is "
-    "contrarian by design: buying weakness is expected, so a falling price alone is not a reason to skip). "
+    "Judge it against the setup's historical base rate and logic given in context.setup_base_rate. Contrarian "
+    "setups buy weakness (a falling price alone is not a reason to skip); TREND setups buy strength (high RSI or a "
+    "big recent gain alone is not a reason to skip). "
     "Skip only if this instance looks clearly worse than the typical case. Round-trip cost is ~0.55%. "
     "confidence = your probability (0..1) that price reaches the target before the stop. "
     'Reply JSON only: {"stance":"BUY"|"SKIP","confidence":0..1,"argument":"..."}. ' + FA)
@@ -34,8 +35,9 @@ BULL_SYS = (
 BEAR_SYS = (
     "You are the Bear critic (risk skeptic) of the same desk. Find concrete reasons this long entry may fail: "
     "falling-knife momentum, weak 24h trend, wide spread, thin bids, toman/USDT shock, recent losses on this "
-    "coin, target not covering costs. The setup is contrarian by design (see context.setup_base_rate): do not "
-    "veto merely because price fell; veto only when this case is clearly worse than the base rate. "
+    "coin, target not covering costs, exhaustion after a vertical move. Respect the setup's logic in "
+    "context.setup_base_rate (contrarian setups buy falls, trend setups buy strength): do not veto for the very "
+    "property the setup trades; veto only when this case is clearly worse than the base rate. "
     'Reply JSON only: {"veto":true|false,"severity":0..1,"argument":"..."}. ' + FA)
 
 ARBITER_SYS = (

@@ -1,0 +1,41 @@
+tf,strategy,regime,params,exit,train_n,train_%/day,test_n,test_win%,TEST_%/day,all_cfg_median,all_cfg_pos%
+240min,supertrend,none,"{""n"": 14, ""mult"": 3.0}",swing,12,0.139,10,90.0,0.456,0.424,100
+240min,xs_momentum,none,"{""gain"": 0.06}",swing,11,0.394,7,85.7,0.332,0.322,100
+60min,ichimoku,btc_uptrend_adx,{},trend,13,0.032,17,47.1,0.329,0.021,50
+60min,heikin_ashi,btc_uptrend_adx,"{""n_red"": 3}",trend,27,0.052,20,50.0,0.228,0.014,50
+240min,xs_momentum,btc_uptrend,"{""gain"": 0.03}",swing,8,0.19,2,100.0,0.162,0.162,100
+60min,xs_momentum,btc_uptrend,"{""gain"": 0.06}",swing,7,0.212,5,60.0,0.157,0.146,75
+240min,ema_cross,none,"{""f"": 20, ""s"": 50}",trend,11,0.205,4,75.0,0.135,0.059,50
+240min,ttm_squeeze,btc_uptrend,"{""kc_mult"": 1.5}",swing,6,-0.099,4,100.0,0.133,0.1,100
+240min,adx_di,none,"{""th"": 25}",swing,20,0.338,6,66.7,0.129,0.151,100
+60min,donchian,btc_uptrend,"{""n"": 96}",trend,16,0.046,15,46.7,0.104,-0.418,17
+240min,ttm_squeeze,none,"{""kc_mult"": 2.0}",swing,6,0.249,9,66.7,0.07,0.27,100
+240min,ema_cross,btc_uptrend,"{""f"": 20, ""s"": 50}",trend,8,0.026,2,100.0,0.027,0.0,33
+240min,donchian,btc_uptrend,"{""n"": 48}",swing,6,0.125,3,66.7,0.014,0.014,67
+240min,ema_cross,btc_uptrend_adx,"{""f"": 9, ""s"": 21}",trend,6,-0.107,0,,0.0,0.0,0
+240min,macd,btc_uptrend,"{""below_zero"": true}",swing,8,0.121,0,,0.0,0.0,0
+240min,macd,none,"{""below_zero"": false}",trend,23,0.128,1,0.0,-0.018,-0.543,0
+60min,ichimoku,none,{},trend,69,-0.373,32,37.5,-0.02,-0.337,0
+60min,heikin_ashi,btc_uptrend,"{""n_red"": 5}",trend,20,-0.024,7,42.9,-0.043,-0.045,25
+60min,adx_di,btc_uptrend,"{""th"": 25}",swing,8,-0.096,4,25.0,-0.056,-0.189,0
+240min,donchian,none,"{""n"": 48}",swing,9,0.032,8,37.5,-0.069,0.007,50
+60min,macd,btc_uptrend,"{""below_zero"": true}",trend,34,0.026,12,50.0,-0.108,-0.111,0
+240min,heikin_ashi,none,"{""n_red"": 3}",swing,30,0.103,12,33.3,-0.113,-0.078,0
+60min,adx_di,btc_uptrend_adx,"{""th"": 20}",swing,6,-0.107,7,14.3,-0.159,-0.11,0
+60min,macd,btc_uptrend_adx,"{""below_zero"": true}",trend,6,0.154,5,40.0,-0.168,-0.104,25
+60min,donchian,none,"{""n"": 96}",trend,24,-0.305,22,40.9,-0.219,-0.825,0
+60min,xs_momentum,none,"{""gain"": 0.06}",swing,19,0.318,11,27.3,-0.244,-0.354,0
+60min,donchian,btc_uptrend_adx,"{""n"": 48}",trend,12,-0.037,23,34.8,-0.306,-0.3,17
+60min,supertrend,btc_uptrend_adx,"{""n"": 10, ""mult"": 2.0}",trend,13,0.153,10,40.0,-0.363,-0.35,0
+60min,ema_cross,btc_uptrend_adx,"{""f"": 12, ""s"": 26}",trend,9,0.089,16,18.8,-0.391,-0.424,0
+60min,supertrend,btc_uptrend,"{""n"": 14, ""mult"": 3.0}",swing,33,-0.216,12,16.7,-0.395,-0.493,0
+60min,ttm_squeeze,btc_uptrend_adx,"{""kc_mult"": 1.5}",swing,13,-0.09,12,16.7,-0.403,-0.219,25
+60min,heikin_ashi,none,"{""n_red"": 5}",trend,61,0.332,19,36.8,-0.431,-0.51,0
+60min,ichimoku,btc_uptrend,{},swing,50,-0.314,24,29.2,-0.442,-0.178,50
+60min,adx_di,none,"{""th"": 25}",swing,26,-0.252,24,20.8,-0.464,-0.885,0
+60min,ttm_squeeze,none,"{""kc_mult"": 1.5}",trend,75,-0.672,21,19.0,-0.494,-0.316,25
+60min,ttm_squeeze,btc_uptrend,"{""kc_mult"": 1.5}",swing,47,-0.394,15,13.3,-0.506,-0.214,50
+60min,ema_cross,btc_uptrend,"{""f"": 9, ""s"": 21}",swing,44,-0.223,19,21.1,-0.683,-0.472,0
+60min,ema_cross,none,"{""f"": 12, ""s"": 26}",trend,82,-0.372,33,18.2,-0.793,-0.839,0
+60min,supertrend,none,"{""n"": 14, ""mult"": 3.0}",trend,69,-0.721,47,8.5,-1.813,-1.598,0
+60min,macd,none,"{""below_zero"": true}",trend,129,-0.452,89,25.8,-2.315,-1.263,0

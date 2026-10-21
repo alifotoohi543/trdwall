@@ -11,7 +11,7 @@ import pandas as pd
 from src.config import ROOT, settings
 from src.market_data import add_indicators, load_history, resample
 from src.research.fastsim import simulate
-from src.research.strategies import EXITS, s_rsi_oversold, s_zscore
+from src.research.strategies import EXITS, s_rsi_oversold, s_supertrend, s_zscore
 from src.strategy import usd_frame
 
 warnings.filterwarnings("ignore")
@@ -67,6 +67,16 @@ def portfolio(tr, max_pos=3, size=0.2, start=None, end=None):
 
 px15, sig15, usdt15 = frames("15min")
 px60, sig60, _ = frames("60min")
+px240, sig240, _ = frames("240min")
+
+
+def xs_mom(sig, bars, gain):
+    idx = None
+    for d in sig.values():
+        idx = d.index if idx is None else idx.intersection(d.index)
+    r = pd.DataFrame({s: d["close"].reindex(idx).pct_change(bars) for s, d in sig.items()})
+    b = r.eq(r.max(axis=1), axis=0) & (r > gain)
+    return {s: b[s] & ~b[s].shift(1, fill_value=False) for s in sig}
 t0 = usdt15.index[0] + pd.Timedelta(days=3)
 t_end = usdt15.index[-1]
 t_split = t0 + (t_end - t0) * 0.67
@@ -75,15 +85,19 @@ parts = {
     "zscore_1h":     trades_for("zscore_1h", "60min", {s: s_zscore(sig60[s], z0=3.0) for s in SYMS}, px60, sig60, "mr", 1),
     "xs_rev_15m":    trades_for("xs_rev_15m", "15min", xs_rev(sig15, 4, 0.05), px15, sig15, "trend", 4),
     "rsi20_15m":     trades_for("rsi20_15m", "15min", {s: s_rsi_oversold(sig15[s], rsi_th=20) for s in SYMS}, px15, sig15, "trend", 4),
+    "supertrend_4h": trades_for("supertrend_4h", "240min", {s: s_supertrend(sig240[s], 14, 3.0) for s in SYMS}, px240, sig240, "swing", 0.25),
+    "momentum_4h":   trades_for("momentum_4h", "240min", xs_mom(sig240, 6, 0.06), px240, sig240, "swing", 0.25),
     "rsi25_15m_cur": trades_for("rsi25_15m_cur", "15min", {s: s_rsi_oversold(sig15[s], rsi_th=25) for s in SYMS}, px15, sig15, "mr", 4),
 }
 combos = {
-    "current bot (rsi25 15m, 5 coins)": parts["rsi25_15m_cur"][parts["rsi25_15m_cur"].symbol.isin(settings.symbols)],
+    "current bot (rsi25 15m, 5 coins)": parts["rsi25_15m_cur"][parts["rsi25_15m_cur"].symbol.isin(["BTCTMN", "ETHTMN", "SOLTMN", "XRPTMN", "DOGETMN"])],
     "current bot on 14 coins": parts["rsi25_15m_cur"],
     "zscore_1h": parts["zscore_1h"],
     "xs_rev_15m": parts["xs_rev_15m"],
     "zscore_1h + xs_rev_15m": pd.concat([parts["zscore_1h"], parts["xs_rev_15m"]]),
     "zscore_1h + xs_rev_15m + rsi20_15m": pd.concat([parts["zscore_1h"], parts["xs_rev_15m"], parts["rsi20_15m"]]),
+    "trend only (supertrend_4h + momentum_4h)": pd.concat([parts["supertrend_4h"], parts["momentum_4h"]]),
+    "ALL 5 (dip + trend)": pd.concat([parts[k] for k in ("zscore_1h", "xs_rev_15m", "rsi20_15m", "supertrend_4h", "momentum_4h")]),
 }
 d_tr, d_te = (t_split - t0).days + (t_split - t0).seconds / 86400, (t_end - t_split).days + (t_end - t_split).seconds / 86400
 rows = []

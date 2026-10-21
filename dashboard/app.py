@@ -167,23 +167,25 @@ with tab_live:
             else:
                 st.info("داده سرمایه هنوز کافی نیست (هر ۵ دقیقه ثبت می‌شود).")
         with b:
-            st.markdown("#### اسکن آخر بازار (ترکیب ۳ الگوریتم روی قیمت دلاری)")
+            st.markdown("#### اسکن آخر بازار (ترکیب ۵ الگوریتم روی قیمت دلاری)")
             scan = kv("last_scan") or {}
             rows = pd.DataFrame(scan.get("rows", []))
             if len(rows):
                 status_fa = {"no_setup": "بدون سیگنال", "xs_reversal": "✅ بازگشت مقطعی", "zscore_1h": "✅ Z-Score",
-                             "oversold_rsi20": "✅ اشباع فروش", "probe": "🧪 ورود آزمایشی"}
+                             "oversold_rsi20": "✅ اشباع فروش", "supertrend_4h": "🚀 سوپرترند ۴س",
+                             "momentum_4h": "🚀 مومنتوم ۴س", "probe": "🧪 ورود آزمایشی"}
                 rows["وضعیت"] = rows.status.map(lambda x: status_fa.get(x, "⚠️ " + str(x)))
-                for c in ("z_1h", "r4h_usd"):
+                for c in ("z_1h", "r4h_usd", "st_4h", "r24h_usd"):
                     if c not in rows:
                         rows[c] = None
                 st.dataframe(rows.rename(columns={"symbol": "نماد", "price": "قیمت (تومان)", "rsi_usd": "RSI ۱۵د",
-                                                  "z_1h": "Z ۱س", "r4h_usd": "بازده ۴س٪"})
-                             [["نماد", "قیمت (تومان)", "RSI ۱۵د", "Z ۱س", "بازده ۴س٪", "وضعیت"]],
+                                                  "z_1h": "Z ۱س", "r4h_usd": "بازده ۴س٪", "st_4h": "روند ۴س",
+                                                  "r24h_usd": "بازده ۲۴س٪"})
+                             [["نماد", "قیمت (تومان)", "RSI ۱۵د", "Z ۱س", "بازده ۴س٪", "روند ۴س", "بازده ۲۴س٪", "وضعیت"]],
                              hide_index=True, width="stretch", height=300,
                              column_config={"قیمت (تومان)": st.column_config.NumberColumn(format="localized")})
-                st.caption("ماشه‌ها: Z ۱ساعته < ‎−۳ · بدترین بازده ۴ساعته بین ۱۴ ارز و < ‎−۵٪ · RSI ۱۵دقیقه < ۲۰ — "
-                           "ایجنت‌ها فقط روی سیگنال بیدار می‌شوند")
+                st.caption("خرید در ریزش: Z ۱ساعته < ‎−۳ · بدترین بازده ۴ساعته < ‎−۵٪ · RSI ۱۵دقیقه < ۲۰ | "
+                           "روندگیری: سوپرترند ۴ساعته صعودی شود · بهترین بازده ۲۴ساعته > ‎+۶٪ — ایجنت‌ها فقط روی سیگنال بیدار می‌شوند")
             st.markdown("#### پوزیشن‌های باز")
             pos = q("SELECT symbol, qty, entry, stop, target, opened, kind, trailing FROM positions")
             if len(pos):

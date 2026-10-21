@@ -53,6 +53,11 @@ class StrategyParams:
 
 # Base rates from scripts/run_backtest.py + event study (27 days of Wallex 15m data), shown to the agents.
 SETUP_BASE_RATES = {
+    "supertrend_4h": "TREND setup (buys strength, high RSI is normal here): 4h SuperTrend(14,3) flips up on the USD price. "
+                     "Walk-forward OUT-OF-SAMPLE win-rate 90% (n=10), +0.46%/day at 20% size, positive in training and in "
+                     "100% of parameter variants. Trailing stop, holds up to 12h",
+    "momentum_4h": "TREND setup (buys strength): the coin with the best 24h USD return in the 14-coin universe and above +6%, "
+                   "on 4h bars. OUT-OF-SAMPLE win-rate 86% (n=7), positive in 100% of variants. Trailing stop, up to 12h",
     "zscore_1h": "1h close >3 std below its 48h mean (USD basis), walk-forward OUT-OF-SAMPLE: win-rate 71%, "
                  "avg +1.4%/trade net (n=17 over 11 coins); also positive in training. Mean-reversion, exits within 4h",
     "xs_reversal": "coin with the worst 4h USD return in the 14-coin universe and below -5%: OUT-OF-SAMPLE win-rate 54%, "
@@ -175,8 +180,10 @@ def position_size_tmn(equity: float, price: float, stop: float, dd: float) -> fl
 EXIT_PROFILES = {
     "mr":    dict(stop_atr=2.5, tp_atr=4.0, hold_h=4, trail_act=None, trail_atr=None),
     "trend": dict(stop_atr=2.0, tp_atr=10.0, hold_h=24, trail_act=2.0, trail_atr=2.0),
+    "swing": dict(stop_atr=2.0, tp_atr=6.0, hold_h=12, trail_act=2.0, trail_atr=1.5),
 }
-ENSEMBLE_PRIORITY = ["xs_reversal", "zscore_1h", "oversold_rsi20"]
+ENSEMBLE_PRIORITY = ["xs_reversal", "zscore_1h", "supertrend_4h", "momentum_4h", "oversold_rsi20"]
+MOM_GAIN = 0.06
 XS_DROP = 0.05
 
 
@@ -194,12 +201,13 @@ def make_signal(symbol: str, kind: str, sig_row: pd.Series, price: float, exit_n
 
 
 def ensemble_signals(px15: dict, sig15: dict, sig60: dict, usdt15: pd.DataFrame,
-                     now: pd.Timestamp, p: StrategyParams | None = None) -> tuple[list[Signal], dict]:
+                     now: pd.Timestamp, p: StrategyParams | None = None,
+                     sig240: dict | None = None) -> tuple[list[Signal], dict]:
     """Signals on the last closed bars + per-symbol diagnostics for the scan log.
 
     The 1h z-score only fires right after its hour closes (fresh), never on a stale bar.
     """
-    from src.research.strategies import s_rsi_oversold, s_zscore   # same code as the research
+    from src.research.strategies import s_rsi_oversold, s_supertrend, s_zscore   # same code as the research
 
     p = p or StrategyParams()
     diag = {s: {} for s in px15}
@@ -231,6 +239,29 @@ def ensemble_signals(px15: dict, sig15: dict, sig60: dict, usdt15: pd.DataFrame,
             if fresh and bool(s_zscore(d60, z0=3.0).iloc[-1]):
                 out.append(make_signal(s, "zscore_1h", d60.iloc[-1], float(px15[s]["close"].iloc[-1]), "mr", d60.index[-1]))
 
+    # 4h trend module: only right after a 4h bar closes
+    if sig240:
+        fresh4 = {s: len(d) > 30 and now - (d.index[-1] + pd.Timedelta("240min")) < pd.Timedelta("15min")
+                  for s, d in sig240.items()}
+        for s, d4 in sig240.items():
+            if len(d4) > 30:
+                diag[s]["st_4h"] = int(supertrend_dir_last(d4))
+            if fresh4.get(s) and bool(s_supertrend(d4, 14, 3.0).iloc[-1]):
+                out.append(make_signal(s, "supertrend_4h", d4.iloc[-1], float(px15[s]["close"].iloc[-1]), "swing",
+                                       d4.index[-1]))
+        idx4 = None
+        for d in sig240.values():
+            idx4 = d.index if idx4 is None else idx4.intersection(d.index)
+        if idx4 is not None and len(idx4) > 7:
+            r24 = pd.DataFrame({s: d["close"].reindex(idx4).pct_change(6) for s, d in sig240.items()})
+            best = r24.eq(r24.max(axis=1), axis=0) & (r24 > MOM_GAIN)
+            for s in sig240:
+                diag[s]["r24h_usd"] = round(float(r24[s].iloc[-1]) * 100, 2) if pd.notna(r24[s].iloc[-1]) else None
+                fl = best[s] & ~best[s].shift(1, fill_value=False)
+                if fresh4.get(s) and bool(fl.iloc[-1]) and idx4[-1] == sig240[s].index[-1]:
+                    out.append(make_signal(s, "momentum_4h", sig240[s].iloc[-1], float(px15[s]["close"].iloc[-1]),
+                                           "swing", idx4[-1]))
+
     rank = {k: i for i, k in enumerate(ENSEMBLE_PRIORITY)}
     out.sort(key=lambda x: rank[x.kind])
     if shock:
@@ -244,3 +275,8 @@ def ensemble_signals(px15: dict, sig15: dict, sig60: dict, usdt15: pd.DataFrame,
         if ok and x.symbol not in {k.symbol for k in kept}:
             kept.append(x)
     return kept, diag
+
+
+def supertrend_dir_last(d: pd.DataFrame) -> float:
+    from src.research.strategies import supertrend_dir
+    return float(supertrend_dir(d, 14, 3.0).iloc[-1])

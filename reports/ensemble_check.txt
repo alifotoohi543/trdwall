@@ -1,0 +1,10 @@
+train 18.1d | test 8.9d | max 3 positions, 20% each, all costs included
+                                ensemble  train_ret%  train_maxdd%  train_n  TEST_ret%  TEST_maxdd%  TEST_n  trades/day  3d_mean%  3d_worst%  3d_pos%
+        current bot (rsi25 15m, 5 coins)        0.60          1.77       23       0.83         1.06       9        1.18      0.13      -1.41       67
+                 current bot on 14 coins       -0.03          2.57       52       0.17         2.06      33        3.14     -0.05      -3.07       53
+                               zscore_1h        2.57          1.37       22       2.76         0.74      14        1.33      0.69      -1.33       57
+                              xs_rev_15m        2.55          3.72       30       5.96         0.91      13        1.59      1.05      -1.63       65
+                  zscore_1h + xs_rev_15m        3.14          3.93       44       3.28         1.36      22        2.44      0.93      -1.97       61
+      zscore_1h + xs_rev_15m + rsi20_15m        4.20          3.54       52       3.68         1.19      28        2.96      1.04      -2.04       63
+trend only (supertrend_4h + momentum_4h)        6.29          2.60       21       5.36         0.16      11        1.18      0.85      -1.54       82
+                     ALL 5 (dip + trend)        8.22          3.50       65       8.53         1.19      39        3.85      1.68      -2.49       71
