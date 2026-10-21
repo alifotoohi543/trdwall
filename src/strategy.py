@@ -47,6 +47,15 @@ class StrategyParams:
     shock_stop_atr: float = 0.75    # tightened stop distance during a shock
 
 
+# Base rates from scripts/run_backtest.py + event study (27 days of Wallex 15m data), shown to the agents.
+SETUP_BASE_RATES = {
+    "oversold": "first 15m bar with USD-basis RSI<25: mean fwd 4h return +1.34% gross (n=120 bars), "
+                "backtest net win-rate 56%; edge weakens when 24h drop exceeds ~6% or during USDT shocks",
+    "pullback": "RSI dip inside uptrend: historically weak after fees (few samples)",
+    "mean_rev": "Bollinger reclaim after oversold: ~0% fwd 4h, weak",
+}
+
+
 @dataclass
 class Signal:
     symbol: str

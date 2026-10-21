@@ -100,28 +100,28 @@ class WallexClient:
 
     # -------------------------------------------------------------- private
     def balances(self) -> dict[str, dict]:
+        """{asset: {"value": total, "locked": frozen, ...}} for the account owning the API key."""
         return self._request("GET", "/v1/account/balances", private=True)["balances"]
 
     def fee_levels(self) -> Any:
         return self._request("GET", "/v1/account/fee", private=True)
 
-    def place_order(self, symbol: str, side: str, qty: float, price: float | None = None,
-                    order_type: str = "LIMIT", client_id: str | None = None) -> dict:
+    def place_order(self, symbol: str, side: str, qty: str, price: str, order_type: str = "LIMIT",
+                    client_id: str | None = None) -> dict:
+        """POST /v1/account/orders. qty/price must already be rounded strings.
+        client_id may only contain letters, digits and underscore (Wallex rule)."""
         body: dict[str, Any] = {"symbol": symbol, "side": side.upper(), "type": order_type.upper(),
-                                "quantity": f"{qty:.8f}"}
-        if price is not None:
-            body["price"] = f"{price:.0f}" if symbol.endswith("TMN") else f"{price}"
+                                "quantity": qty, "price": price}
         if client_id:
             body["client_id"] = client_id
         return self._request("POST", "/v1/account/orders", private=True, json=body)
 
-    def cancel_order(self, client_order_id: str) -> dict:
-        return self._request("DELETE", "/v1/account/orders", private=True,
-                             params={"clientOrderId": client_order_id})
+    def cancel_order(self, client_id: str) -> dict:
+        return self._request("DELETE", f"/v1/account/orders/{client_id}", private=True)
 
-    def open_orders(self, symbol: str | None = None) -> list[dict]:
+    def order_status(self, client_id: str) -> dict:
+        return self._request("GET", f"/v1/account/orders/{client_id}", private=True)
+
+    def open_orders(self, symbol: str | None = None) -> Any:
         params = {"symbol": symbol} if symbol else None
-        return self._request("GET", "/v1/account/openOrders", private=True, params=params)["orders"]
-
-    def order_status(self, client_order_id: str) -> dict:
-        return self._request("GET", f"/v1/account/orders/{client_order_id}", private=True)
+        return self._request("GET", "/v1/account/openOrders", private=True, params=params)
