@@ -41,6 +41,8 @@ BAR = pd.Timedelta(TF)
 ENTRY_TTL = timedelta(minutes=15)        # unfilled limit entries are cancelled after one bar
 PROBE_AFTER = timedelta(hours=20)        # activity probe if no entry for this long
 PROBE_RSI = 32.0
+MAX_ENTRY_SPREAD_PCT = 0.35               # no entries into thin books
+MIN_STOP_PCT = 1.2                        # stop never inside the noise / spread
 HISTORY_DAYS = 14                     # 1m history kept in memory (4h indicators need ~2 weeks)
 
 
@@ -163,6 +165,14 @@ class Engine:
                                 entry_price=price, client_order_id=client_id) if action == "SELL" else None,
             llm={"calls": 0, "cost_usd": 0.0})
         self.db.add_decision(dec.model_dump())
+
+    def log_skip(self, s, reason_fa: str, spread) -> None:
+        dec = DecisionLog(timestamp=now_iso(), mode=settings.mode, symbol=s.symbol, action="SKIP", confidence=0.0,
+                          setup=s.kind, market_metrics={"price_tmn": s.price, "spread_pct": spread},
+                          agent_debate=AgentDebate(bull_argument="—", bear_argument="—", risk_assessment=reason_fa),
+                          llm={"calls": 0, "cost_usd": 0.0})
+        self.db.add_decision(dec.model_dump())
+        log.info("SKIP %s %s: %s", s.symbol, s.kind, reason_fa[:90])
 
     # ============================================================== entries
     def execute_entry(self, symbol: str, tmn: float, sig: dict) -> str | None:
@@ -346,6 +356,16 @@ class Engine:
                 ob = self.broker.book(s.symbol)
             except WallexError:
                 ob = {}
+            # Live execution guards (night books are thin: 2026-10-22 trades were stopped instantly because the
+            # spread, 0.6-0.8%, was wider than the 2xATR stop, 0.4-0.7%).
+            spread = ob.get("spread_pct")
+            if spread is None or spread > MAX_ENTRY_SPREAD_PCT:
+                self.log_skip(s, f"اسپرد لحظه‌ای {spread if spread is not None else '?'}٪ بیشتر از سقف ورود "
+                                 f"{MAX_ENTRY_SPREAD_PCT}٪ است (بازار کم‌عمق)؛ ورود انجام نشد.", spread)
+                continue
+            min_dist = max(MIN_STOP_PCT, 3 * spread) / 100
+            if s.stop > s.price * (1 - min_dist):
+                s.stop = s.price * (1 - min_dist)       # widen; Risk Guard re-sizes to keep 1% risk
             snap_usd = snapshot(sig15[s.symbol])
             snap_usd.pop("price", None)
             snap_usd.update(spread_pct=round(ob.get("spread_pct") or 0, 3),

@@ -40,11 +40,11 @@ def xs(sig, bars, thr, worst=True):
     return {s: pick[s] & ~pick[s].shift(1, fill_value=False) for s in sig}
 
 
-def trades(name, tf, flags, px, sig, exn, bph):
+def trades(name, tf, flags, px, sig, exn, bph, min_stop=0.0):
     ex, out = EXITS[exn], []
     for s, fl in flags.items():
         t = simulate(px[s], sig[s]["atr_pct"], fl.fillna(False), HS.get(s, 0.002), ex["stop_atr"], ex["tp_atr"],
-                     max(1, int(ex["hold_h"] * bph)), ex["trail_act"], ex["trail_atr"])
+                     max(1, int(ex["hold_h"] * bph)), ex["trail_act"], ex["trail_atr"], min_stop)
         t["t_entry"], t["t_exit"] = t.t_signal + pd.Timedelta(tf), t.t_exit + pd.Timedelta(tf)
         out.append(t.assign(symbol=s, strategy=name))
     return pd.concat(out)

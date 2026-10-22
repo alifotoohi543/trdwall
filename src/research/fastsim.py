@@ -22,7 +22,7 @@ def _arrays(px: pd.DataFrame, atr_pct: pd.Series):
     return o, h, l, c, atr_pct.reindex(px.index).to_numpy(float)
 
 
-def _trade(i, o, h, l, c, ap, half_spread, stop_atr, tp_atr, hold_bars, trail_act, trail_atr):
+def _trade(i, o, h, l, c, ap, half_spread, stop_atr, tp_atr, hold_bars, trail_act, trail_atr, min_stop=0.0):
     """Simulate one limit entry signalled at bar i. Returns (exit_bar, net_ret, reason) or None."""
     n = len(c)
     if i >= n - 1 or not np.isfinite(ap[i]) or ap[i] <= 0:
@@ -32,7 +32,7 @@ def _trade(i, o, h, l, c, ap, half_spread, stop_atr, tp_atr, hold_bars, trail_ac
         return None
     fill = min(o[i + 1], limit)
     a = ap[i] * limit
-    stop, tp = fill - stop_atr * a, fill + tp_atr * a
+    stop, tp = fill - max(stop_atr * a, min_stop * fill), fill + tp_atr * a
     rt_cost = 2 * FEE + half_spread
     trailing = False
     last = min(i + hold_bars, n - 1)
@@ -51,13 +51,13 @@ def _trade(i, o, h, l, c, ap, half_spread, stop_atr, tp_atr, hold_bars, trail_ac
 
 def simulate(px: pd.DataFrame, atr_pct: pd.Series, entries: pd.Series, half_spread: float,
              stop_atr: float, tp_atr: float, hold_bars: int,
-             trail_act: float | None = None, trail_atr: float | None = None) -> pd.DataFrame:
+             trail_act: float | None = None, trail_atr: float | None = None, min_stop: float = 0.0) -> pd.DataFrame:
     arr = _arrays(px, atr_pct)
     sig = entries.reindex(px.index).fillna(False).to_numpy(bool)
     out, i, n = [], 0, len(px)
     while i < n - 1:
         if sig[i]:
-            r = _trade(i, *arr, half_spread, stop_atr, tp_atr, hold_bars, trail_act, trail_atr)
+            r = _trade(i, *arr, half_spread, stop_atr, tp_atr, hold_bars, trail_act, trail_atr, min_stop)
             if r is not None:
                 j, ret, reason = r
                 out.append((px.index[i], px.index[j], ret, reason, j - i))
