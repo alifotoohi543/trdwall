@@ -193,7 +193,8 @@ class Engine:
         qty = o["filled_qty"]
         if not qty:
             return
-        self.db.upsert_position({"symbol": o["symbol"], "qty": qty, "entry": fill, "stop": meta["stop"] * scale,
+        stop = min(meta["stop"] * scale, fill * (1 - MIN_STOP_PCT / 100))   # floor also for orders placed earlier
+        self.db.upsert_position({"symbol": o["symbol"], "qty": qty, "entry": fill, "stop": stop,
                                  "target": meta["target"] * scale, "atr": meta["atr"], "opened": now_iso(),
                                  "kind": meta["kind"], "cost_tmn": qty * fill / (1 - settings.fees.taker),
                                  "trailing": 0, "decision_id": o["client_id"], "hold_h": meta.get("hold_h", 4),
