@@ -134,7 +134,7 @@ class Engine:
         bal = self.broker.balances()
         cash = bal.get("TMN", 0.0)
         reserved = sum(o["tmn"] for o in self.db.open_orders() if o["side"] == "BUY")
-        exposure = 0.0
+        exposure, stale = 0.0, False
         for asset, qty in bal.items():
             if asset == "TMN" or qty <= 0:
                 continue
@@ -143,13 +143,21 @@ class Engine:
                 bid = self.broker.book(sym)["bid"] or 0.0
             except (WallexError, KeyError):
                 bid = 0.0
+            if not bid:
+                # price unavailable (network drop): never value a holding at zero - that once produced a
+                # fake 25% drawdown; use the last known 1m close and flag the portfolio as stale
+                m1 = self.m1.get(sym)
+                bid = float(m1["close"].iloc[-1]) if m1 is not None and len(m1) else 0.0
+                stale = True
             exposure += qty * bid
         # reserved TMN of resting buys is locked (LIVE) / debited (SHADOW) but still ours
         equity = cash + reserved + exposure
-        peak = max(self.db.get("peak_equity", equity), equity)
-        self.db.put("peak_equity", peak)
+        peak = self.db.get("peak_equity", equity)
+        if not stale:
+            peak = max(peak, equity)
+            self.db.put("peak_equity", peak)
         dd = 1 - equity / peak if peak else 0.0
-        return {"equity": equity, "cash": cash, "exposure_tmn": exposure,
+        return {"equity": equity, "cash": cash, "exposure_tmn": exposure, "stale": stale,
                 "exposure_pct": round(exposure / equity * 100, 2) if equity else 0.0,
                 "dd_pct": round(dd * 100, 3), "open_positions": len(self.db.positions()),
                 "pending_entries": len([o for o in self.db.open_orders() if o["side"] == "BUY"])}
@@ -501,7 +509,8 @@ class Engine:
         self.manage_positions(shock)
         if utcnow() - self.last_equity_snap >= timedelta(minutes=5):
             pf = self.portfolio()
-            self.db.snapshot_equity(pf["equity"], pf["cash"], pf["exposure_tmn"], pf["dd_pct"])
+            if not pf.get("stale"):                 # only record snapshots built from live prices
+                self.db.snapshot_equity(pf["equity"], pf["cash"], pf["exposure_tmn"], pf["dd_pct"])
             self.last_equity_snap = utcnow()
 
     def run(self, once: bool = False) -> None:
