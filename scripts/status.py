@@ -53,6 +53,22 @@ def main(hours: int) -> None:
         print(f"{t(r['ts'])} {r['level']:6s} {r['msg'][:110]}")
     print(f"\nLLM: {scan.get('llm_budget')}")
 
+    # whole-challenge summary (numbers for the demo video)
+    tr = list(db.execute("SELECT pnl_tmn, pnl_pct FROM trades"))
+    eqs = [r[0] for r in db.execute("SELECT equity FROM equity ORDER BY ts")]
+    peak, max_dd = settings.risk.initial_capital_tmn, 0.0
+    for e in eqs:
+        peak = max(peak, e)
+        max_dd = max(max_dd, 1 - e / peak)
+    n_dec = db.execute("SELECT COUNT(*) FROM decisions").fetchone()[0]
+    n_agent = sum(1 for (p,) in db.execute("SELECT payload FROM decisions")
+                  if json.loads(p).get("setup") not in ("risk_rule", "connectivity_test", "INCIDENT_test_run"))
+    print("\n=== SINCE START (for the video)")
+    print(f"return {(eq / settings.risk.initial_capital_tmn - 1) * 100:+.2f}% | max drawdown {max_dd * 100:.2f}% | "
+          f"closed trades {len(tr)} (wins {sum(1 for t in tr if t[0] > 0)}) | realized {sum(t[0] for t in tr):+,.0f} TMN")
+    print(f"decision records {n_dec} (agent-debated {n_agent}) | connection outages {conn.get('outages', 0)} | "
+          f"LLM cost ${scan.get('llm_budget', {}).get('total_usd', 0):.4f}")
+
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
